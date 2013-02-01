@@ -3,17 +3,45 @@
 Standard computer systems are hierarchically organized as a three
 layers stack. The lowest layer is the bare hardware, the middle one is the operating system and the 
 upper layer contains the application software.
-Two neighbour layers can communicate through a well defined \emph{interface}, so that each layer can ignore how the
+Two neighbour layers can communicate through a well-defined \emph{interface}, so that each layer can ignore how the
 lower layers are actually implemented. In this way, the interface provides an \emph{abstraction} of the underlying software/hardware
-systems.
+resources.
 
 This (relatively) simple architecture has proven to be very effective in delivering the IT services required
 by companies, individual users and other organizations.
+
+\vspace{0.5cm}
 
 Neverthless, more complex computer systems organizations have been devised and used, in order to overcome some limitations
 of the standard computer system model. These computing environments are are known as \emph{Virtual Machines} (VMs) systems.
 By itself, the term \emph{Virtual Machine} can have several meanings, so when using it is important to point out what we are
 addressing.
+In general \emph{virtualization} provides a way of increasing the \emph{flexibility} of real hardware/software resources. When a 
+resource  is virtualized, it appears to be a different virtual resource or even a \emph{set} of different virtual resources.
+
+As an example, a single IA32 processor can be virtualized in a way that emulates more PowerPC processors. Once this is done, you
+can build more standard 3-layer computer systems on top of each emulated PowerPC (virtual) processor, using unmodified OS and 
+applications designed to be used on the PowerPC architecture.
+
+In the VMs terminology, each virtualized system is called \emph{guest}, whereas the system providing the virtualization support
+is called \emph{host}.
+You can virtualize all the resources you wants: disks, network devices, memories and other peripherals.
+
+\vspace{0.5cm}
+
+Generally speaking VMs allow to build computer systems with more abstraction levels than the standard model have. This has important
+advantages:
+\begin{itemize}
+  \item In terms of \emph{flexibility}, using VMs you can easily run programs compiled for a given Instruction Set Architecture (ISA) 
+	and a given Operating System (OS) on top of a computer system that has a different ISA and/or a different OS. Using a standard
+	system you would be bound to the ISA of your processor and the operating system installed on your machine.
+
+  \item In terms of \emph{protection}, VMs can provide multiple isolated execution environments running on the same phisical machine.
+	This allows to execute different applications in different VMs (each VM can have its own OS), so that if an application has a
+	security hole, an attacker cannot use the hole to do malicious attacks to an applications running on a different VM. 
+	This scenary is still possible when applications are run in the same OS.
+  \item In terms of resources usage, VMs can help to reduce hardware costs and power consumption, since they 
+\end{itemize}
 
 
 \section{Virtual Machines}
