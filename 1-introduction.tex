@@ -1,11 +1,18 @@
 \chapter{Introduction}
 
 Standard computer systems are hierarchically organized as a three
-layers stack. The lowest layer is the bare hardware, the middle one is the operating system and the 
+layers stack, as depicted in figure \ref{fig:3ls}. The lowest layer is the bare hardware, the middle one is the operating system and the 
 upper layer contains the application software.
 Two neighbour layers can communicate through a well-defined \emph{interface}, so that each layer can ignore how the
 lower layers are actually implemented. In this way, the interface provides an \emph{abstraction} of the underlying software/hardware
 resources.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{3-layers-stack.pdf}
+\caption{A standard 3-layers-stack computer system}
+\label{fig:3ls}
+\end{figure}
 
 This (relatively) simple architecture has proven to be very effective in delivering the IT services required
 by companies, individual users and other organizations.
@@ -105,13 +112,27 @@ Same-ISA system VM can be further divided, depending on how the VMM is implement
 	  supporting it. It's up on the VMM to interface directly with the physical resources of the server machines, such as
 	  CPUs, memory and peripherals. Type 1 VMM can deliver a very good performance, but are more complex to design and require
 	  more development efforts, since there is no OS providing basic services, abstractions, device drivers and the like.
+	  An example of system including a Type 1 VMM is illustrated in figure \ref{fig:t1vmm}.
 	  
     \item Type 2 VMM (Hosted VMM). In this case the VMM it's just a regular OS process, that runs on the host OS along with other
 	  processes. The VMM can access the physical resources of the host machine through the OS intermediation. These speeds up
 	  the development process and make the VMM portable. The performance is generally inferior with respect to the Type 1 VMM.
-	  however.
+	  however. An example of system including a Type 1 VMM is illustrated in figure \ref{fig:t2vmm}.
 \end{itemize}
 
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{type-1-vmm.pdf}
+\caption{An example of system using Type 1 VMMs.}
+\label{fig:t1vmm}
+\end{figure}
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{type-2-vmm.pdf}
+\caption{An example of system using Type 2 VMMs.}
+\label{fig:t2vmm}
+\end{figure}
 
 \vspace{0.5cm}
 
@@ -141,9 +162,9 @@ the ISA which is designed to efficiently support multiprogramming).
 \label{sec:vmimpl}
 
 As showed in section \ref{sec:vmclass}, there are many types of conceptually different virtual machines.
-Neverthless, all the VMs deal with executing code written for a certain environment (source code), namely an interface, using another
-environment. This is a form \emph{emulation}: the term emulation refers to the process of implementing an interface and functionality
-of one system on a system having a different interface and functionality. %\cite{Smith},
+Neverthless, all the VMs deal with executing code written for a certain environment (source code, or guest code),
+using another environment (the host environment). This is a form \emph{emulation}: the term emulation refers to the process of implementing an interface 
+and functionality of one system on a system having a different interface and functionality. %\cite{Smith},
 
 The basic techniques employed to realize this are three: interpretation, dynamic translation, and hardware-based virtualization.
 These techniques can be used alone or in combination to provide the virtual environment we want to implement.
@@ -194,14 +215,50 @@ Similarly to the interpretation method, with dynamic translation the VMM has (or
 execution, because doing a translation process, it can put \emph{traps}\footnote{Point in the code that interrupts the guest
 execution and give control to the VMM directly, or indirectly thorugh the host OS.} in the guest code wherever it wants.
 
+\subsubsection{The same-ISA case}
+\label{sec:sidt}
 Interesting enough, interpretation and dynamic translation can be employed in the same-ISA case. In this case the translation is
-simplified, and basically
+simplified and, most of the time, the source code can execute nativley on the host machine, without performance losses.
 
+However there are some instructions that cannot be executed natively, because they access physical resources, because
+are trying to access resources that does not exists on the physical machines, or because they are not easily virtualizable. %cite{x86}
+
+As a typical example, memory accesses addressing the I/O space or the memory mapped I/O can have side effects and then must be emulated 
+in software. If the instruction was intended to access a physical resource that exists on the host, like a network adapter, the VMM 
+cannot allow direct access to the device, because other processes or the host OS could be accessing the same device at the same time,
+and certainly the host network driver and the guest network driver are not aware one of the other.
+If the instruction was intended to access a virtual network adapter (that doesn't exist on the host), the I/O instruction must be trapped
+in order to emulate the device behaviour in software.
 
 
 
 \subsection{Hardware-based virtualization}
-Due to the widespread use of VMs, the hardware houses have added some processor extension
+Due to the widespread use of VMs, the processor vendors have added some processor extensions that allow for efficient and safe execution
+of guest code in the same-ISA case. These hardware assists are intended to overcome some of the common problems arising when using
+dynamic translation techniques, and at the same time they make it easy to execute guest code natively.
+For the x86 ISA, AMD and Intel have proposed their extensions (AMD-v and Intel VT-x), that provide all the means necessary to fully
+virtualize the ISA.
+
+These feature are fairly complex, and here we are only going to outline the aspects that are intersting with respect to this thesis.
+
+When the extension are present, the CPU is able to switch to a special mode, that we will call \emph{VM mode}, through a so called
+\emph{VMEnter} instruction and switch back to normal mode through a so called \emph{VMExit} instruction.
+When in VM mode, the CPU can execute guest code in a controlled environment. When necessary, the CPU can switch back to normal mode, 
+starting to execute host code (VMM, OS or other processes).
+The switch operation between the the host world and the guest world is conceptually similar to the more familiar process context switch,
+since it includes saving the host (guest) state and loading the guest (host) state. These operation are done in hardware but are
+still very expensive, expecially if we consider the additional software overhead involved in this host-guest transition, due to
+OS operations and possible userspace/kernelspace transitions that could be necessary to transfer the control to the VMM or to the
+guest.
+
+The VM switches are necessary in some situations, such as dealing with I/O operations (see \ref{sec:sidt}), or when we want
+to deliver an interrupt to the guest.
+
+Since VM switches are very expensive, but necessary when dealing with I/O operations, trying to minimize them is fundamental if a VMM
+wants to deliver good I/O performance.
+
+
+
 
 %\begin{enumerate}
 %	\item 24 \emph{tiles} (ossia mattonelle) che compongono il cluster: ogni tiles contiene due core IA
