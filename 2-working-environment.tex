@@ -4,7 +4,7 @@ In section \ref{sec:vmclass} we introduced a classification of Virtual Machine s
 The work presented in this thesis is restricted to same-ISA System Virtual Machines, where the Virtual Machine Monitor is a type 2 VMM.
 In other words, we will deal with VMs that able to run an arbitrary OS compiled for the host ISA. The guest OS can in turn provide an 
 execution environment for many user application.
-Since the VMM is of type 2, it is implemented as a regular process in the host OS, and can make use of all the OS service.
+Since the VMM is of type 2, it is implemented as a regular process in the host OS, and can make use of all the OS services.
 We can therefore access the physical resource without requiring administrator previleges.
 
 We also restrict our work to VMMs that make use of hardware-based virtualization, because the optimizations we will intrduce are
@@ -22,14 +22,129 @@ Several VMM software belonging to the considered class are available. QEMU, Virt
 Hyper-V or Windows VirtualPC are among the most common examples of this kind of VMMs. These software tools are extremely widespread
 and for this reason performance optimizations in these area are certainly useful.
 
-This said, we have chosen the QEMU-KVM Virtual Machine Monitor for implementation and tests, although our optimizations are potentially
-applied to VMM of the same class.
+This said, we have chosen the QEMU-KVM Virtual Machine Monitor for implementations and tests, although our optimizations are
+relevant to the entire class of VMMs.
+
+A GNU/Linux-based operating system (Archlinux) have been used on the host machine. The guest OS is generally Archlinux, but 
+some tests have been performed with FreeBSD as a guest, too. Although Linux is a kernel and not a complete OS, in the following we 
+will use  the expression ``Linux OS'' to actually mean ``GUN/Linux-based OS'', for the sake of simplicity.
 
 \vspace{0.5cm}
 
-Since our optimizations concern network performance, we had to choose a network device to work with. The \emph{e1000} device
-was chosen, since it is emulated by the vast majority of VMMs.
+Since our optimizations concern network performance, we had to choose a network device to work with. The \emph{e1000} class of 
+network devices was chosen, since it is emulated by the vast majority of VMMs and supported by the main OSs (Windows, Linux, FreeBSD).
 
 
-\section{QEMU architecture}
-QEMU is an open source system emulator, and can actually emulate architecture...
+\section{QEMU features}
+QEMU is a free, open source and multi-platform type 2 VMM, that makes use of dynamic translation to achieve good emulation performance.
+QEMU-KVM is a QEMU branch that extends the original software to take advantage of hardware-based virtualization.
+Whenever possible, QEMU-KVM uses hardware virtualization in order to execute guest code natively.
+In the following we will use the terms QEMU and QEMU-KVM in an interchangeable manner.
+At the date of this writing, the QEMU-KVM version number is 1.2.0, so we will refer to that version.
+
+QEMU is a very flexible tool:
+\begin{itemize}
+    \item It supports process virtual machines: by means of dynamic translation it can execute on the host OS a single program compiled 
+	  for an other ISA. This operating mode is called \emph{User mode emulation}.
+	  
+    \item It supports system virtual machines: by means of dynamic translation and hardware-assisted virtualization (when possible) it
+	  can emulate full computer systems (including common peripherals), supporting unmodified operating systems. This operating
+	  mode (which is the one we are interested in) is called \emph{Full system emulation}.
+	  
+    \item It supports various architectures, including  IA-32 (x86), x86-64, MIPS R4000, Sun's SPARC sun4m, Sun's SPARC sun4u,
+	  ARM development boards (Integrator/CP and Versatile/PB), SH4 SHIX board, PowerPC,
+	  ETRAX CRIS and MicroBlaze architectures.
+	  
+    \item It can emulate Symmetric Multiprocessing Systems (SMP), making use of all the CPUs that are present on the 
+	  host system.
+	  
+    \item It is able to emulate various peripherals, such as hard disks, CD-ROM drives, network cards, audio interfaces, 
+	  or USB devices.
+	  
+    \item Like similar hypervisors, it is able to provide its VM with network connectivity. The way this can be done will be
+	  presented in section \ref{sec:qemunet}.
+	  
+    \item It does not normally require administrative rights to run. In our experiments administrative rights won't be
+	  necessary.
+\end{itemize}
+
+QEMU is able to emulate the \emph{e1000} class of PCI network devices\footnote{To be more precise, the emulated hardware exposes
+to the guest OS the PCI device ID of the 82540EM model.}, as well as other network devices (RTL8139C+, i8255x (PRO100), 
+NE2000 (RTL8029), AMD PCNET II (Am79C7070a)).
+
+In addition to that, QEMU support the \emph{Virtio} framework, that exposes a paravirtualized network device, virtio-net, intended 
+to be used for high performance networking. The Virtio paravirtualized soution will be analized later.
+
+
+
+\section{QEMU internal architecture}
+In this section we will illustrate those details of QEMU implementation that are necessary to understand in order to reach our
+goals.
+
+\vspace{0.5cm}
+
+QEMU is an event-loop based software, and is implemented as a single-process multi-threaded application. 
+One thread, referred to as \emph{IOThread}, executes the event-loop, waiting for new events to happen\footnote{This is 
+implemented in \texttt{main-loop.c}}.
+The waiting routine is a \texttt{select()} system call, which is not the most efficient choice on Unix-like systems
+\footnote{ \texttt{poll()}, and espcially Linux \texttt{epoll()} or BSD \texttt{kqueue()} are more efficient},
+but is more portable across different platforms.
+
+\vspace{0.5cm}
+
+The file descriptors associated with the \texttt{select()} can be associated to regular files, sockets, device files (such as TAP 
+devices), or even special in-kernel objects, such as POSIX timers, signals and eventfds. These file descriptors are used by QEMU to let
+the VM communicate with the host, and possibly with the rest of the Internet. In other words, they are used for performing the I/O 
+operations requested by the VM. Of course the guest OS still performs I/O operations accessing I/O ports or memory-mapped I/O (MMIO) in 
+his physical address space and is unaware of being emulated.
+
+\vspace{0.5cm}
+
+The QEMU core codebase offers to the QEMU developer an API that can be used to implement emulation of the devices.
+The API also provides two useful abstractions: the QEMUTimer and the QEMUBH. 
+
+QEMUTimers are a one-shot absolute timers, that can be 
+used to execute a callback function at a certain point of time in the future. The callback is always executed by the IOThread, when it
+recognizes that the deadline has been passed. The QEMUTimers are supported
+by the Linux OS with a single one-shot relative POSIX timer\footnote{Similar mechanisms are used in other OS, or if POSIX timers are not
+available under the Linux OS}, which is always (re)armed to expire - waking up the event-loop - at
+the earliest deadline. The expire check for QEMUTimers is done at the end of each event-loop iteration, even if the event-loop was 
+waken up for a reason different from the POSIX timer expiration. In the current implementation, moreover, every time the POSIX timer
+is rearmed, the relative deadline is forced to be greater or equal that 250 $\mu$s\footnote{For more information about the QEMUTimer
+interface and implementation, please refer to the file \texttt{qemu-timer.c} in the QEMU project root directory.}.
+
+\vspace{0.5cm}
+
+QEMUBH is the QEMU abstraction of the \emph{bottom half} concept, widely used in OS driver implementation. A QEMUBH can be seen as
+a QEMUTimer that expires as soon as possible. In practice when a QEMUBH is scheduled, it notifies the event-loop, which in turn 
+wakes up (or finishes the current iteration and begins another iteration) and execute all the callbacks of currently scheduled QEMUBHs.
+Therefore the QEMUBH callbacks are always executed by the IOThread, similarly to the QEMUTimer callbacks\footnote{For more information
+about the QEMUBH interface and implementation, please refer to the files \texttt{qemu-aio.h} and \texttt{async.c} in the QEMU project
+root directory}. This feature is very important in terms of parallelism, as will be clear in the following chapters.
+
+\vspace{0.5cm}
+
+The IOThread, while executing the event-loop, handles all the interactions between the VM and the external world.
+The guest code, however, is executed by one or more threads, that we will call \emph{VCPU threads}. In the current implementation QEMU
+creates as many VCPU threads as the number of SMP processors specified by the users.
+When using hardware-based virtualization (we assumed this in the beginning of this chapter)
+
+\vspace{0.5cm}
+
+In our case the \emph{e1000} device is implemented through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
+A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
+device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
+when launching QEMU\footnote{This is done through the \texttt{device} option. E.g. \texttt{qemu-kvm -device e1000 ...} }.
+
+\vspace{0.5cm}
+
+
+
+
+
+\subsection{Network architectures}
+\label{sec:qemunet}
+
+
+
+\section{The e1000 network adapter}
