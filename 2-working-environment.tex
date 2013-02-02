@@ -81,8 +81,7 @@ to be used for high performance networking. The Virtio paravirtualized soution w
 In this section we will illustrate those details of QEMU implementation that are necessary to understand in order to reach our
 goals.
 
-\vspace{0.5cm}
-
+\subsection{QEMU event-loop}
 QEMU is an event-loop based software, and is implemented as a single-process multi-threaded application. 
 One thread, referred to as \emph{IOThread}, executes the event-loop, waiting for new events to happen\footnote{This is 
 implemented in \texttt{main-loop.c}}.
@@ -122,29 +121,106 @@ Therefore the QEMUBH callbacks are always executed by the IOThread, similarly to
 about the QEMUBH interface and implementation, please refer to the files \texttt{qemu-aio.h} and \texttt{async.c} in the QEMU project
 root directory}. This feature is very important in terms of parallelism, as will be clear in the following chapters.
 
-\vspace{0.5cm}
-
+\subsection{VCPU Threads}
 The IOThread, while executing the event-loop, handles all the interactions between the VM and the external world.
 The guest code, however, is executed by one or more threads, that we will call \emph{VCPU threads}. In the current implementation QEMU
 creates as many VCPU threads as the number of SMP processors specified by the users.
-When using hardware-based virtualization (we assumed this in the beginning of this chapter)
+When using hardware-based virtualization (we made this assumption at the beginning of this chapter), a VCPU thread continuously
+switch between the VM mode and the normal mode (see section \ref{sec:hbv}).
+
+When the VCPU tries to execute an I/O operation - accessing I/O ports or MMIO - a VMExit happens. There could be other events
+that cause a VMExit, but I/O operations are the type of events we are interested in. On a VMExit the VCPU stops executing guest
+code and starts executing QEMU code, in order to handle - if is the case - the event that caused the VMExit.
+When the event is handled, the VPCU executes e VMEnter and continues to run the guest code.
 
 \vspace{0.5cm}
 
-In our case the \emph{e1000} device is implemented through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
-A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
-device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
-when launching QEMU\footnote{This is done through the \texttt{device} option. E.g. \texttt{qemu-kvm -device e1000 ...} }.
+Since multiple threads are involved, and all of them - IOThread included - can access the shared structures used by the emulator
+(e.g. the structures employed to implement the virtual devices), mutual exclusion is required. In the current implementation the
+mutual exclusion is guaranteed by a single big-lock, called the \texttt{iothread lock}.
 
-\vspace{0.5cm}
+Therefore, on every VMExit a VCPU has to acquire the \texttt{iothread lock} before it can handle the event. After the event has been
+handled, the VPCU thread release the \texttt{iothread lock} and execute a VMEnter instruction.
+Similarly, the IOthread has to acquire the \texttt{iothread lock} every time it wakes up for event handling, and release the lock
+only when the event-loop iteration terminates.
 
+Putting all together, the figure \ref{fig:qemuthreads} depicts the QEMU thread scheme.
 
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{qemu-threads.pdf}
+\caption{QEMU thread scheme.}
+\label{fig:qemuthreads}
+\end{figure}
 
 
 
 \subsection{Network architectures}
 \label{sec:qemunet}
+When running a VM it is of fundamental importance to make possible for the guest to communicate with the outside world using the
+networking infrastructure, otherwise the VM itself would be an useless computing box.
+
+Since the VM it's a software entity, however, it isn't connected to any real network. Therefore the hypervisor has to provide some
+form of network infrastructure virtualization, so that the guest OS thinks its (virtual) network device is connected to a physical
+network and can then exchange packets with the outside.
+
+\vspace{0.5cm}
+
+All the hypervisors cited previously (QEMU included) provide the VM administrator with a few virtual network infrastructure modes, 
+so that she can choose the best way to connect her VM.
+
+Three modes are commonly employed:
+\begin{itemize}
+    \item NAT mode. In this case the guest OS thinks to be physically connected to a completely fake LAN, entirely emulated inside the 
+	  hypervisor. The VMM usually emulates a DHCP server, a DNS server and a gateway router, so that the guest OS can configure
+	  its network interfaces and its routing tables
+	  and communicate with the outside world. When the guest sends a TCP/UDP packet on the fake LAN, the VMM intercepts the packet,
+	  performs address translation (NAT) turning the guest source IP (the guest IP) into the host IP and sends the packet towards
+	  its destination using the host OS services (thus the host OS routing tables). The inverse translation is performed when
+	  receiving a packet.
+	  
+	  In this way the VM is easily provided with Internet connectivity, but it's not visible form the outside
+	  and cannot communicate with other VMs present on the same host.
+	  In QEMU this mode is called \emph{Usermode networking}.
+
+    \item Host-only mode. Also in this case the guest OS thinks to be physically connected to a LAN. The LAN is emulated
+	  by means of a software bridge (that emulates a layer-2 network switch), and the VM is connected to a port of the bridge.
+	  More VMs can be connected to the same bridge, making inter-VM communication possible. The software bridge can be internally
+	  implemented in the hypervisor, or can be an external software bridge.
+	  
+	  Whit QEMU this mode can be set up on a Linux host using the in-kernel bridging and TAP interfaces. Each VM is assigned a TAP
+	  interface where can write/read ethernet frames, and all the TAPs are bridged together to the in-kernel bridge.
+	  In this way a frame sent by the guest is written by QEMU to its associated TAP and is therefore routed by the bridge
+	  to the correct destination TAP. The receiving QEMU process can then read the frame from the TAP and push it to its VM.
+	  In this case no DHCP or DNS server is emulated, and you have to configure yourself the network of each VM\footnote{The 
+	  configuration can be static or you can run a DHCP server on one of the VMs connected to the bridge.}.
+	  Since the software bridge itself has its separate network interface, also the host can communicate on the LAN.
+	  
+    \item Bridged mode. This mode is an extension of the host-only mode. The only difference is that a physical host network interface
+	  is also bridged to the VMs LAN. Since the physical interface becomes a bridge port, the host can access the physical network
+	  through the software bridge interface.
+	  In this way the host can share its connectivity with all the VM connected to the software bridge. If the physical interface
+	  is connected to a LAN, with this configuration the VMs LAN appears to be part of the physical LAN.
+	  
+\end{itemize}
+	
+Clearly the NAT mode is not interesting with respect to our goals, since it is only a way the VM can easily obtain Internet 
+connectivity, and it's not intended to be a flexible networking mode. Instead we will consider host-only mode, since we
+are intersted in optimizing the communication performance between two VMs on the same software bridge or between a VM and the host
+bridge interface. In this work it would make no sense considering to bridge also the host physical interfaces (bridged mode), 
+because we optimizing performance of physical network adapter it's not among our goals.
+
+
+\subsection{Network frontend and backend}
+Déh, ci so' du peri.
+
+%In our case the \emph{e1000} device is implemented through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
+%A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
+%device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
+%when launching QEMU\footnote{This is done through the \texttt{device} option. E.g. \texttt{qemu-kvm -device e1000 ...} }.
+
 
 
 
 \section{The e1000 network adapter}
+Vedi il manuale Intel.
