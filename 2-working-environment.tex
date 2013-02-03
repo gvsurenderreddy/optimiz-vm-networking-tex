@@ -155,7 +155,7 @@ Putting all together, the figure \ref{fig:qemuthreads} depicts the QEMU thread s
 
 
 
-\subsection{Network architectures}
+\subsection{Networking architectures}
 \label{sec:qemunet}
 When running a VM it is of fundamental importance to make possible for the guest to communicate with the outside world using the
 networking infrastructure, otherwise the VM itself would be an useless computing box.
@@ -204,23 +204,230 @@ Three modes are commonly employed:
 	  
 \end{itemize}
 	
-Clearly the NAT mode is not interesting with respect to our goals, since it is only a way the VM can easily obtain Internet 
-connectivity, and it's not intended to be a flexible networking mode. Instead we will consider host-only mode, since we
+Clearly the NAT mode is not interesting with respect to our goals, since it is only intended to be a way the VM can easily obtain
+Internet connectivity, and it's not intended to be a flexible networking mode. Instead we will consider host-only mode, since we
 are intersted in optimizing the communication performance between two VMs on the same software bridge or between a VM and the host
 bridge interface. In this work it would make no sense considering to bridge also the host physical interfaces (bridged mode), 
 because we optimizing performance of physical network adapter it's not among our goals.
 
 
 \subsection{Network frontend and backend}
-Déh, ci so' du peri.
+In order to implement a specific networking architecture, the QEMU implementation includes a degree o separation, namely an interface,
+between the piece of code that emulates the network device and the code that provides access to the chosen networking model.
+This is done because the two subsystems are completely independent, and you can easily combine every virtual network device with
+every networking access mode.
+
+Using the QEMU terminology, the network device emulation is also called \emph{network frontend}, and the networking access mode is
+called \emph{network backend}. 
+
+\vspace{0.5cm}
+
+In our case the network frontend is ``e1000'' and it's implemented within the file hw/e1000.c (in the QEMU project root directory).
+This source file is the only one that contains code which is specific to the e1000 class of networking devices, exporting to the rest 
+of the system the same interface exported by the other network devices.
+
+The network backend can be
+\begin{itemize}
+    \item ``user'', which implements Usermode networking.
+    \item ``tap'', which is an implementation of host-only/bridged networking that relies on TAP devices and in-kernel bridges.
+    \item other implementations of host-only/bridged networking that use a different software bridge solutions, maybe in conjunction
+	  with TAPs and in-kernel bridges. The ``VALE'' backend (\cite{ref:vale}) is an example of high performance alternative 
+	  implementation of the host-only/bridged networking access mode.
+\end{itemize}
+
+\vspace{0.5cm}
+
+Frontend and backend can be seen as two peers connected to each other that are able to exchange ethernet frames. Each peer exports a 
+\texttt{receive} method that accepts an ethernet frame as argument\footnote{The ethernet frame frame can be specified with an address 
+and a length, or with a scatter-gather array.}. That method will be invoked whenever the other peer wants to send a frame.
+
+In this way, when a frontend wants to send a frame to the network, it invokes the \texttt{send\_packet} function provided by the QEMU
+networking API, that will invoke the \texttt{receive} method exported by the backend. The backend \texttt{receive} method will push the
+frame onto the network, in a way that is specific to the backend itself.
+
+On the other direction, when the backend gets a frame from the network, it invokes the \texttt{send\_packet} function, that will in turn
+invoke the \texttt{receive} method exported by the frontend. This method will push the frame into the guest system in a way that is
+specific to the network device model.
+
+The frontend-backend communication is depicted in figure \ref{fig:frontback}.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.60]{frontend-backend.pdf}
+\caption{Interface between network frontend and network backend.}
+\label{fig:frontback}
+\end{figure}
+
+
+
+\section{The e1000 class of network adapters}
+In this section we will illustrate some features and some details about the inner working of an e1000 ethernet network adapter.
+Once again, we will only describe those aspects that are relevant to our goals.
+The complete specification can be found in %cite Intel.
+
+\vspace{0.5cm}
+
+Since the network communication is extremely important in the IT world, the market constantly pushes hardware vendors to produce high
+performance, low-power, fully featured flexible network devices.
+
+As a result, modern network devices are very complex. To get an idea of this complexity, one can observe that a device can implement 
+more then a hundred of software-visible registers. The complexity is the price to pay in order to get high flexibity and several useful
+features. Flexibility helps the IT administrator to tune the device parameters in order to find the right tradeoff between performance and 
+power consumption, throughput and latency, and the like.
+The rich set of features the device come with helps to adapt the device to different usage patterns and allows for performance 
+optimizations (expecially for TCP/IP traffic) when offloading capabilities are present.
+
+Hardware offloading features are supported by virtually every recent network adapter.
+The most common feature are
+\begin{itemize}
+    \item Checksumming offload. When this feature is present, the device computes in hardware the checksums required by the main Internet 
+	  protocols, such as IP, TCP and UDP. This saves the OS to do this work in software, which could be very expensive, expecially 
+	  with checksums that are computed also on the payload and not only on the protocol header (e.g. TCP and UDP checksums).
+	  
+    \item TCP Segmentation Offload. When this feature is present, the device is able to do the TCP segmentation in hardware, splitting
+	  a TCP segment over multiple ethernet frames. The segmentation is necessary because the real MTU of a TCP connection is almost
+	  never greater than 1500 bytes (the ethernet original MTU), but the TCP window is commonly greater than that value. The OS
+	  is then forced to do the splitting. With the feature present, however, the OS can send to the device driver a frame containing a 
+	  TCP segment which is greater than the MTU\footnote{Up to 64KB with the Linux kernel.}. The device driver can pass the packet to
+	  the device that perform the segmentation in hardware and send multiple ethernet frames.
+	  Apart from the obvious speed-up obtained because the operation is done in hardware rather then in software, this mechanisms has 
+	  an important positive side effect. The network overhead necessary to traverse the TCP/IP stack is suffered only once, for a
+	  big TCP packet, instead of once for each MTU-sized fragment. This clearly amortize the kernel per-packet overhead.
+	  
+    \item Scatter-gather capability. When this feature is present, the device is able to send a frame that is stored in multiple non
+	  contiguous fragments in the machine physical memory. Therefore the OS is not forced to linearize (gather) the fragments,
+	  avoiding the copy overhead. This is useful specially when the OS wants to send large packets. In other words the device is 
+	  gather-capable.
+\end{itemize}
+The e1000 devices have this three features.
+
+
+\subsection{Interface with the driver}
+Being high performance devices, modern network adapters rely on Direct Memory Access (DMA) operations and interrupts.
+
+When the device driver wants to send an ethernet frame through the adapter, it has to tell the device where the frame is stored
+in physical memory and how long it is\footnote{When dealing with fragmented frames, the driver has to specify somehow a scatter-gather
+array.}. Once the device knows where the frame is, it can directly access the physical memory\footnote{In this example we assume
+there isn't any IOMMU.} and send it on the wire. More commonly, the frame is DMA'ed into an internal buffer for further processing before
+being sent on the wire, but this is just a detail.
+
+When the adapter receives a frame from the wire, it has to store it in the machine physical memory. For this reason, the device driver
+has to tell the adapter where it can store incoming frames, before the frames actually came. If the adapter doesn't know how to put
+incoming frames, it cannot accept them.
+
+\vspace{0.5cm}
+
+It is clear that there must be a well-defined interface between the driver and the device. This interface is known as \emph{ring}.
+A ring is a circular array of \emph{descriptors} that are used to exchange address/length information\footnote{Being an array a ring is a 
+contiguous zone in the physical memory.}. A network adapter have at least two rings.
+The first one is the \emph{TX ring} and it is used with outgoing frames, whereas the second is the \emph{RX ring}, and it is used with
+incoming frames. Network adapter can have multiple TX/RX rings with possibly different policies and priorities, so that one can
+do some traffic engineering.
+
+However, the e1000 adapter model emulated by QEMU has one TX ring and one RX ring. The array length, namely the number of descriptors,
+can be decided by the driver to a certain extent. In e1000 it must be a power of two and not more than 4096.
+
+
+\subsubsection{TX ring}
+The e1000 TX ring is an array of $N$ TX descriptors. Each TX descriptor is 16 bytes long and contains the address (in physical memory) and the
+length of a frame (or a frame fragment) that is going to be sent or that has already been sent. The descriptor contains also flags that
+can be used to specify options, and status bits. 
+
+Two index registers are implemented for the synchronization between the driver and the adapter:
+The TDT register (Transmit Descriptor Tail) and the TDH register (Transmit Descriptor Head). These are \emph{index} registers since
+their value are array indexes with respect to the TX ring descriptors array.
+
+At the start-up, TDT and TDH are initialized by the driver to the same value, usually 0. When the driver wants to send a new frame,
+it writes the physical address and the length of the frame in the TX descriptor pointed by the TDT register and then increments the TDT
+register itself. Since the descriptor array is circular, the TDT must be set adequately.
+
+When the adapter recognizes that TDH is different by TDT, is knows that there are new frames to transmit, and start processing the
+descriptor pointed by TDH, sending on the wire the frame pointed by the descriptor (if is the case), and then increments the TDH register.
+The adapter stops the processing only when TDH has the same content as TDT has. A write access to the TDT register is therefore the
+way the device driver notifies the adapter that there are new frames ready to be sent.
+
+When the driver increments the TDT, the descriptor previously pointed (the one that has just been written) is committed to the hardware,
+and the hardware owns it until the decriptor is processed.
+
+Therefore, in each moment the ring is partitioned in two contiguous parts: The descriptor owned by the hardware, which are waiting
+to be sent on the wire, and the descriptors owned by software, which are free to be used by the driver to commit new frames.
+
+In order to prevent the index registers to wrap around, the driver should not never use a TX descriptor if this is the very last free
+TX descriptor. This happens when TDT is shuch that incrementing it circularly would cause TDT == TDH. When the TX ring is in this
+state (TX ring full), the driver should stop transmitting. The transmission can be enabled again when the hardware process some descriptors,
+incrementing TDH.
+
+The figure \ref{fig:txring} depicts the TX ring with its index registers.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.35]{tx-ring.pdf}
+\caption{The e1000 TX ring with its index registers. The grey area contains software-owned descriptors, while the white area
+	contains hardware-owned descriptors.}
+\label{fig:txring}
+\end{figure}
+
+
+\subsubsection{RX ring}
+The e1000 RX ring is an array of $N$ RX descriptors. Each RX descriptor is 16 bytes long and contains the address (in physical 
+memory) and the length of a frame that has been received by the adapter, or only the address of a memory location that can be
+used by the adapter to store an incoming frame. The descriptor contains also flags that can be used to specify options and status bits.
+Two index registers are implemented for the synchronization between the driver and the adapter:
+The RDT register (Receive Descriptor Tail) and the RDH register (Receive Descriptor Head). These are \emph{index} registers since
+their value are array indexes with respect to the RX ring descriptors array.
+
+At the start-up, the driver initializes RDH and RDT to 0. At this point, the adapter still doesn't know of any memory buffer where it
+can store incoming frames, so it cannot receive anything.
+To give the hardware memory buffers to work with, the driver puts the physical address of a memory buffer\footnote{How the memory 
+buffer is allocated depends on the OS and on how the driver is implemented.} in the RX descriptor pointed by RDT and increments 
+RDT circularly. Writing to the length field of the RX descriptor is useless, since this value is not used by the device. It's important to note
+that the size of the memory buffer must be greater or equal then the maximum frame length, since we cannot know in advance how long
+a future frame is going to be.
+
+A write access to the RDT register is therefore the way the device driver notifies the adapter that there are new memory buffers ready
+to be used to store incoming frames.
+
+If the adapter sees that RDH is different by RDT, it recognizes to have memory buffers available, and starts accepting incoming frames.
+When a new frame arrives from the wire, the adapter fetches the RX descriptor pointed by the RDH register, copies the frame to the address
+contained in the RX descriptor, writes back the length of the received frame to the RX descriptor itself and increments the RDH register
+circularly.
+At this point, if programmed to do so, the device would normally sent an interrupt (see section \ref{sec:e1000int}, in order to tell
+the driver there are new received frames ready to be pushed to the kernel network stack.
+
+When the driver increments the RDT, the descriptor previously pointed (the one that has just been written) is committed to the hardware,
+and the hardware owns it until the decriptor is used.
+
+Therefore, in each moment the ring is partitioned in two contiguous parts: The descriptor owned by the hardware, which can be
+used to store new incoming frames, and the descriptors owned by software, which are unused or point to received frames ready to
+be pushed to the network stack.
+
+Similarly to what happens the TX ring, in order to prevent the register indexes to wrap around, the driver should never increment the RDT
+register if the increment would cause RDT == RDH. When this situation happens (full RX ring) the driver should stop giving memory buffers to
+the adapter. When new frame are received, the hardware increments RDH, and so it is possible to restart.
+
+The interrupt routine should then push the arrived frames to the kernel and provide the adapter with more memory buffers (incrementing
+the RDT), otherwise the adapter cannot accept more incoming frames.
+
+A common strategy is to try to keep the RX ring always full. In order to do this, at the startup
+the driver writes $N-1$ RX descriptor with the address of $N-1$ memory buffers, and set RDT to $N-1$, so that the ring is full-
+Every time an interrupt arrives, the interrupt routine pushes the received frames to the kernel and replenish the ring, making it full again.
+This strategy avoid situations in which the adapter is forced to reject incoming frames because it has no memory buffers available.
+
+The figure \ref{fig:rxring} depicts the RX ring with its index registers.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.35]{rx-ring.pdf}
+\caption{The e1000 RX ring with its index registers. The grey area contains software-owned descriptors, while the white area
+	contains hardware-owned descriptors.}
+\label{fig:rxring}
+\end{figure}
+
+
+\subsection{Interrupts generation}
+\label{sec:e1000int}
 
 %In our case the \emph{e1000} device is implemented through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
 %A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
 %device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
 %when launching QEMU\footnote{This is done through the \texttt{device} option. E.g. \texttt{qemu-kvm -device e1000 ...} }.
-
-
-
-
-\section{The e1000 network adapter}
-Vedi il manuale Intel.
