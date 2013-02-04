@@ -302,7 +302,7 @@ The most common feature are
 The e1000 devices have this three features.
 
 
-\subsection{Interface with the driver}
+\subsection{Data interface with the driver}
 Being high performance devices, modern network adapters rely on Direct Memory Access (DMA) operations and interrupts.
 
 When the device driver wants to send an ethernet frame through the adapter, it has to tell the device where the frame is stored
@@ -426,6 +426,64 @@ The figure \ref{fig:rxring} depicts the RX ring with its index registers.
 
 \subsection{Interrupts generation}
 \label{sec:e1000int}
+The e1000 network adapter can generate interrupts for different reasons.
+
+We are interested in two types of interrupt:
+\begin{itemize}
+    \item TX interrupts: these interrupts are generated when the transmission of one ore more hardware-owned frames completes. Each TX 
+	  descriptor has
+	  a bit flag (Report Status, RS) that can be set to specify if the harware should send an interrupt as soon as the transmission 
+	  of the associated
+	  frame is complete. In every case an interrupt is always sent when the TX ring becames empty (TDH == TDT).
+	  The interrupt routine, depending on the OS and the driver implementation, may execute cleanup operations on the descriptors 
+	  that have been processed and mark them as free to be used to commit new frame to the adapter.
+	      
+    \item RX interrupts: these interrupts are generated after the hardware has received (and stored in physical memory) an incoming frame, 
+	  in order to notify the driver that can send the frame to the kernel network stack. When the frame is sent to the kernel, it will
+	  find the right way to its destination, that can be anything (trash included). Assuming the destination is a user process,
+	  what the OS does is just to append the packet to a queue associated to the receiving socket. At this point the sleeping user
+	  process is notified and can be scheduled to complete the read operation from the socket queue.
+\end{itemize}
+
+There is a big concern when dealing with RX interrupts. If the device doesn't limit them, they act as a source of uncontrolled load for the 
+CPU.
+The receiving machine, in fact, is forced to serve incoming RX interrupts even if the RX interrupt rate is very high. Since we are
+dealing with high performance devices, we must be able to receive up to 1 Mpps (or even more).
+The overhead involved in interrupt handling is generally quite high, and so each interrupts has a fixed cost that must be paid before
+doing useful work, such as push the received frame to the network stack and let the receiver process actually receive it.
+
+If each packet receive generated an interrupt, we would have to handle up to 1000000 interrupts per seconds, which something that would
+completely stall our machine.
+When the interrupt rate is too high, in fact, the machine spends almost all the time serving interrupts\footnote{The interrupt handling is
+by its nature an high priority task with respect to normal process execution.}, and there is no time left for other things to happen,
+e.g. for user processes to read the received packets. This is a quite bad situation, because the CPU is 100\% utilized, but the machine,
+on the whole, cannot do any useful work.
+
+The situation could be slightly better if the machine has more than one CPU, but still it's not good for the CPU servicing the interrupts
+to spend too much time in interrupt handling overhead.
+
+\vscpae{0.5cm}
+
+Cleary, this problem can only be solved if the device somehow collapses RX interrupts, raising an interrupt every batch of received
+frames, let's say 100 frames per batch, and not every single frame. In this way the interrupt rate is 100 time lower, and the
+interrupt overhead cost is amortized over 100 frames.
+In every case the device must guarantee that a RX interrupt is eventually sent after a period of inactivity, even if it is still waiting
+for a 100-frames batch to be completed, because the device cannot know when the next frames are going to come.
+
+These and similar mechanisms are know as \emph{interrupt mitigation} or \emph{interrupt moderation}, since they tries to moderate the
+interrupt rate.
+
+Interrupt moderations is commonly applied also to TX interrupts (or to all the interrupts in general). The TX interrupt rate can be
+controlled because the driver can control (and limit) the TX rate. Neverthless it is convenient for the driver to take advantage of
+the interrupt-rate-limiting hardware capabilities rather than implement a similar feature in software\footnote{With e1000, an TX 
+interrupt moderation mechanism could be implemented using the RS bit.}.
+
+\vspace{0.5cm}
+
+The e1000 class of network adapters implements two interrupt moderation mechanisms.
+
+
+
 
 %In our case the \emph{e1000} device is implemented through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
 %A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
