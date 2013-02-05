@@ -462,7 +462,7 @@ on the whole, cannot do any useful work.
 The situation could be slightly better if the machine has more than one CPU, but still it's not good for the CPU servicing the interrupts
 to spend too much time in interrupt handling overhead.
 
-\vscpae{0.5cm}
+\vspace{0.5cm}
 
 Cleary, this problem can only be solved if the device somehow collapses RX interrupts, raising an interrupt every batch of received
 frames, let's say 100 frames per batch, and not every single frame. In this way the interrupt rate is 100 time lower, and the
@@ -482,6 +482,41 @@ interrupt moderation mechanism could be implemented using the RS bit.}.
 
 The e1000 class of network adapters implements two interrupt moderation mechanisms.
 
+\subsubsection{The older mechanism}
+The older mechanism is supported by the registers TIDV (Transmit Interrupt Delay Value), TADV (Transmit Absolute Interrupt Delay Value),
+RDTR ( and RADV, where each register is provided with a countdown timer.
+
+\vspace{0.5cm}
+
+TIDV and TADV, when properly set, can be used to provide TX interrupt mitigation on a per-descriptor basis.
+
+When the adapter processes a a TX descriptor, if the RS bit and the IDE bit\footnote{The Interrupt Delay Enable bit (IDE), is another
+bit flag in the TX descriptor, like the RS bit.} are set, an interrupt is not raised immediately, but the TIDV timer is started (or
+restarted) with the value specified in the TIDV register itself. When the TIDV timer expires, an interrupt is raised in order
+to inform the driver about the TX completion of one or many frames, and the TIDV timer is cleared.
+The TIDV register can therefore be used to coalesce TX interrupts.
+
+However, it might be necessary to ensure that no completed transmission remains unnoticed for too long an interval in order to 
+ensure timely release of TX buffers.
+The TADV register has been added for this purpose. Like the TIDV timer, tha TADV timer only applies to TX descriptor where both the
+RS bit and the IDE bit are set. This register can be used to ensure that a TX interrupt occurs before a predifined time interval
+after a transmission (whatever) is completed. The time interval can be specified in the TADV register itself.
+In order to do this, after each TX descriptor is processed, the TADV timer is is started (armed with the value specified in the TADV 
+register) only if it is not already running.
+When the timer expires, a TX interrupt is generated.
+
+\vspace{0.5cm}
+
+RDTR and RADV, when properly set, can be used to provide RX interrupt mitigation on a per-received-frame basis.
+The RDTR timer is started (or restarted) immediatly after a new packet is received and transferred to physical memory, using
+the interval value specified in the RDTR register. When the RDTR timer expires, an RX interrupt is raised, and the timer is cleared.
+The RDTR register can therefore be used to coalesce RX interrupts, in the very same way the register TIDV is used to coalesce TX
+interrupts.
+
+Also in the RX case it may be necessary to ensure that no receive remains unnoticed for too a long interval. The RADV register deal
+with this problem, in the very same way the TADV register does, so we won't explain the mechanism again.
+
+\vspace{0.5cm}
 
 
 
