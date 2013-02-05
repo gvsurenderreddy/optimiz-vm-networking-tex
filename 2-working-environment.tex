@@ -212,6 +212,7 @@ because we optimizing performance of physical network adapter it's not among our
 
 
 \subsection{Network frontend and backend}
+\label{sec:frontback}
 In order to implement a specific networking architecture, the QEMU implementation includes a degree o separation, namely an interface,
 between the piece of code that emulates the network device and the code that provides access to the chosen networking model.
 This is done because the two subsystems are completely independent, and you can easily combine every virtual network device with
@@ -329,6 +330,7 @@ can be decided by the driver to a certain extent. In e1000 it must be a power of
 
 
 \subsubsection{TX ring}
+\label{sec:txring}
 The e1000 TX ring is an array of $N$ TX descriptors. Each TX descriptor is 16 bytes long and contains the address (in physical memory) and the
 length of a frame (or a frame fragment) that is going to be sent or that has already been sent. The descriptor contains also flags that
 can be used to specify options, and status bits. 
@@ -563,6 +565,8 @@ and use the ITR instead.
 
 \section{QEMU e1000 emulation}
 The \emph{e1000} device is implemented in QEMU through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
+This code contained in this file is also referred to as the e1000 \emph{frontend}, according to the terminology introduced in section
+\ref{sec:frontback}.
 
 A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
 device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
@@ -578,8 +582,47 @@ the MMIO region maps all the registers the e1000 device implement, such as TDT, 
 
 A couple of statically defined dispatch tables, one for the read accesses and the other for the write accesses, are used to associate a
 different function to each register.
-In this way ones can (potentially) write a read callback and a write callback for each e1000 register-
+In this way ones can (potentially) write a read callback and a write callback for each e1000 register.
 The emulation of a device is basically achieved with this per-register functions. Of course register can share the same functions or have
 no callback at all.
 
-With reference to the QEMU thread model, register callbacks are executed by a VCPU thread.
+\vspace{0.5cm}
+Let's see in more depth how register callbacks are actually invoked.
+
+When a VCPU is executing the guest code, it may try to access a MMIO location corresponding to the e1000 PCI device, namely an e1000
+register. This usually happens when executing the e1000 device driver.
+The accessing instruction causes a VMExit to happen, and the VCPU thread switches from the guest world to the host world. 
+After the \texttt{iothread\_lock} has been acquired, the QEMU code analyzes the VMExit reason and understands that the VMExit was caused
+by a MMIO access.
+It then uses the physical memory address involved by the memory access to dispatch the event to the right PCI memory region.
+In our case, the read (write) callback registered with the e1000 MMIO BAR is invoked. This callback uses the address to access the 
+e1000 read (write) dispatch table and invokes the specific callback associated to the accessed register.
+
+The register-specific callback emulates the side effects associated with the register access. For instance a write to the TDT
+register will cause the emulated hardware to process all the pending TX frames (see section \ref{sec:txring}).
+
+After the callback returns, the \texttt{iothread\_lock} is released and a VMEnter is executed so that the VCPU switches back to the 
+guest world.
+
+\vspace{0.5cm}
+
+This said, we won't describe in detail all the aspects involved in e1000 emulation. Instead, we will outline the frame
+transmission and frame reception process, focusing on notifications, scheduling and memory copies.
+
+\subsection{TX handling}
+As we wrote in section \ref{sec:txring}, a write to the TDT register is the way the driver notifies the hardware that new TX frames 
+are ready to be processed.
+The TDT register write callback updates the TDT value and then calls the \texttt{start\_xmit} function. This function is a while
+loop that processes all the committed TX descriptors, starting from the descriptor pointed by the TDH register. After each
+descriptor has been processed, the TDH register is incremented circularly. The while loop exits when TDT == TDH, e.g. there
+are no more TX descriptors to be processed.
+When a TX descriptor is processed, the following actions are performed:
+\begin{enumerate}
+    \item The TX frame corresponding to the TX descriptor is copied from the guest memory in a local buffer.
+    \item The TCP/UDP checksum is computed. Recall that e1000 devices are able to compute checksums in hardware, and so the OS 
+	  driver expects the emulated hardware to be able to do it.
+    \item The descriptor is written back to the guest memory in order to report that the TX descriptor has been processed.
+    \item The \texttt{send\_packet} function is invoked in order to pass the frame to the network backend.
+\end{enumerate}
+
+It's very important to note that all this operation are performed by the VCPU thread, that is the same thread.
