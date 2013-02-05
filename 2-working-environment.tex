@@ -488,7 +488,7 @@ RDTR ( and RADV, where each register is provided with a countdown timer.
 
 \vspace{0.5cm}
 
-TIDV and TADV, when properly set, can be used to provide TX interrupt mitigation on a per-descriptor basis.
+TIDV and TADV, when properly set, can be used to provide TX interrupt moderation on a per-descriptor basis.
 
 When the adapter processes a a TX descriptor, if the RS bit and the IDE bit\footnote{The Interrupt Delay Enable bit (IDE), is another
 bit flag in the TX descriptor, like the RS bit.} are set, an interrupt is not raised immediately, but the TIDV timer is started (or
@@ -507,7 +507,7 @@ When the timer expires, a TX interrupt is generated.
 
 \vspace{0.5cm}
 
-RDTR and RADV, when properly set, can be used to provide RX interrupt mitigation on a per-received-frame basis.
+RDTR and RADV, when properly set, can be used to provide RX interrupt moderation on a per-received-frame basis.
 The RDTR timer is started (or restarted) immediatly after a new packet is received and transferred to physical memory, using
 the interval value specified in the RDTR register. When the RDTR timer expires, an RX interrupt is raised, and the timer is cleared.
 The RDTR register can therefore be used to coalesce RX interrupts, in the very same way the register TIDV is used to coalesce TX
@@ -518,9 +518,68 @@ with this problem, in the very same way the TADV register does, so we won't expl
 
 \vspace{0.5cm}
 
+The figure \ref{fig:rdtrstate} shows a state diagram associated to the RDTR timer.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{rdtr-state.png}
+\caption{State diagram of the RDTR timer (Packet Delay Timer). CITE INTEL}
+\label{fig:rdtrstate}
+\end{figure}
+
+The following figures depict some examples about the RDTR and RADV moderation mechanism.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{radv-only.png}
+\caption{RX moderation example that makes use of the RADV timer.}
+\label{fig:rdtrstate}
+\end{figure}
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.45]{rdtr-radv.png}
+\caption{RX moderation example that makes use of both RADV and RDTR timers.}
+\label{fig:rdtrstate}
+\end{figure}
 
 
-%In our case the \emph{e1000} device is implemented through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
-%A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
-%device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
-%when launching QEMU\footnote{This is done through the \texttt{device} option. E.g. \texttt{qemu-kvm -device e1000 ...} }.
+\subsubsection{The newer mechanism}
+Although the older mechanisms allows for fine grained control over the moderation, expecially on the TX side, most of the times the 
+required moderation functionality is way simpler. For these reason a more direct moderation mechanism has been added, which is implemented
+through the ITR register (Interrupt Throttling Register).
+
+If the driver set this register to a value $\delta$, the board ensures that $\delta$ is the minimum inter-interrupt delay, regardless of
+network traffic condition, and the interrupt type.
+In other words, every time an event happens that requires an interrupt (e.g. TX completion or RX completion) the board raise an interrupt
+as soon as possible, while meeting the ITR inter-interrupt delay constraint.
+
+\vspace{0.5cm}
+
+The ITR mechanism, when used, applies to all the interrupts. The Intel manual strongly recommend avoiding the RDTR and RADV register,
+and use the ITR instead.
+
+
+
+\section{QEMU e1000 emulation}
+The \emph{e1000} device is implemented in QEMU through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
+
+A small part of this code contains declarations and routines necessary to register and initialize/uninitialize a new PCI Ethernet 
+device within the rest of the emulator. In this way one or more instances of the e1000 network device can be included by the QEMU users
+when launching QEMU\footnote{This is done through the \texttt{device} option. E.g. \texttt{qemu-kvm -device e1000 ...} }.
+
+When registering a new PCI device, it is necessary to describe the I/O or MMIO regions that the device implements, registering new
+PCI BAR registers. Each BAR register correspond to a different I/O or MMIO region.
+When registering a new BAR, you can specify the callback functions that are invoked whenever the guest code access (reads or writes)
+a location in a region.
+
+The e1000 emulation code registers a MMIO region and an I/O region. The I/O region isn't actually used, whereas
+the MMIO region maps all the registers the e1000 device implement, such as TDT, TDH, RADV, TIDV and so on.
+
+A couple of statically defined dispatch tables, one for the read accesses and the other for the write accesses, are used to associate a
+different function to each register.
+In this way ones can (potentially) write a read callback and a write callback for each e1000 register-
+The emulation of a device is basically achieved with this per-register functions. Of course register can share the same functions or have
+no callback at all.
+
+With reference to the QEMU thread model, register callbacks are executed by a VCPU thread.
