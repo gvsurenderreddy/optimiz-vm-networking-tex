@@ -242,11 +242,11 @@ Frontend and backend can be seen as two peers connected to each other that are a
 \texttt{receive} method that accepts an ethernet frame as argument\footnote{The ethernet frame frame can be specified with an address 
 and a length, or with a scatter-gather array.}. That method will be invoked whenever the other peer wants to send a frame.
 
-In this way, when a frontend wants to send a frame to the network, it invokes the \texttt{send\_packet} function provided by the QEMU
+In this way, when a frontend wants to send a frame to the network, it invokes the \texttt{qemu\_send\_packet} function provided by the QEMU
 networking API, that will invoke the \texttt{receive} method exported by the backend. The backend \texttt{receive} method will push the
 frame onto the network, in a way that is specific to the backend itself.
 
-On the other direction, when the backend gets a frame from the network, it invokes the \texttt{send\_packet} function, that will in turn
+On the other direction, when the backend gets a frame from the network, it invokes the \texttt{qemu\_send\_packet} function, that will in turn
 invoke the \texttt{receive} method exported by the frontend. This method will push the frame into the guest system in a way that is
 specific to the network device model.
 
@@ -412,7 +412,7 @@ The interrupt routine should then push the arrived frames to the kernel and prov
 the RDT), otherwise the adapter cannot accept more incoming frames.
 
 A common strategy is to try to keep the RX ring always full. In order to do this, at the startup
-the driver writes $N-1$ RX descriptor with the address of $N-1$ memory buffers, and set RDT to $N-1$, so that the ring is full-
+the driver writes $N-1$ RX descriptor with the address of $N-1$ memory buffers, and set RDT to $N-1$, so that the ring is full.
 Every time an interrupt arrives, the interrupt routine pushes the received frames to the kernel and replenish the ring, making it full again.
 This strategy avoid situations in which the adapter is forced to reject incoming frames because it has no memory buffers available.
 
@@ -485,7 +485,7 @@ interrupt moderation mechanism could be implemented using the RS bit.}.
 
 The e1000 class of network adapters implements two interrupt moderation mechanisms.
 
-\subsubsection{The older mechanism}
+\subsubsection{The older moderation mechanism}
 The older mechanism is supported by the registers TIDV (Transmit Interrupt Delay Value), TADV (Transmit Absolute Interrupt Delay Value),
 RDTR ( and RADV, where each register is provided with a countdown timer.
 
@@ -530,24 +530,24 @@ The figure \ref{fig:rdtrstate} shows a state diagram associated to the RDTR time
 \label{fig:rdtrstate}
 \end{figure}
 
-The following figures depict some examples about the RDTR and RADV moderation mechanism.
+The figures \ref{fig:radv} and \ref{rdtrradv} depict some examples about the RDTR and RADV moderation mechanism.
 
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{radv-only.png}
 \caption{RX moderation example that makes use of the RADV timer.}
-\label{fig:rdtrstate}
+\label{fig:radvonly}
 \end{figure}
 
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{rdtr-radv.png}
 \caption{RX moderation example that makes use of both RADV and RDTR timers.}
-\label{fig:rdtrstate}
+\label{fig:rdtrradv}
 \end{figure}
 
 
-\subsubsection{The newer mechanism}
+\subsubsection{The newer moderation mechanism}
 Although the older mechanisms allows for fine grained control over the moderation, expecially on the TX side, most of the times the 
 required moderation functionality is way simpler. For these reason a more direct moderation mechanism has been added, which is implemented
 through the ITR register (Interrupt Throttling Register).
@@ -625,7 +625,7 @@ When a TX descriptor is processed, the following actions are performed:
     \item The TCP/UDP checksum is computed. Recall that e1000 devices are able to compute checksums in hardware, and so the OS 
 	  driver expects the emulated hardware to be able to do it.
     \item The descriptor is written back to the guest memory in order to report that the TX descriptor has been processed.
-    \item The \texttt{send\_packet} function is invoked in order to pass the frame to the network backend. With the TAP backend,
+    \item The \texttt{qemu\_send\_packet} function is invoked in order to pass the frame to the network backend. With the TAP backend,
 	  a \texttt{write} system call is invoked to pass the frame to the TAP device associated with the backend.
 \end{enumerate}
 
@@ -643,7 +643,7 @@ pin state was low), sending an interrupt to the guest.
 \subsection{RX emulation}
 When a receiving guest is waiting for new frames to come, the IOThread is blocked in the \texttt{select} system call.
 When a frame arrives to the TAP backend, the \texttt{select} returns and invokes the TAP network backend.
-The backend executes a \texttt{read} system call on the TAP device, extracting the incoming frame, and invoke the \texttt{send\_packet}
+The backend executes a \texttt{read} system call on the TAP device, extracting the incoming frame, and invoke the \texttt{qemu\_send\_packet}
 function that passes the frame to the e1000 frontend, namely to the receive method \texttt{e1000\_receive}.
 
 According to what has been said in \ref{sec:rxring}, the \texttt{e1000\_receive} method perform the following actions:
@@ -659,9 +659,9 @@ with the VCPU thread (or the VCPU threads) executing the guest code.
 
 \vspace{0.5cm}
 
-When the \texttt{send\_packet} function returns, the backends tries to read another frame from the TAP\footnote{The \texttt{read}
+When the \texttt{qemu\_send\_packet} function returns, the backends tries to read another frame from the TAP\footnote{The \texttt{read}
 system call is non-blocking, since the IOThread is executing an event-loop, and so only the central \texttt{select} system call is
-allowed to block.}. If there is another frame to process, the \texttt{send\_packet} is called also on this frame.
+allowed to block.}. If there is another frame to process, the \texttt{qemu\_send\_packet} is called also on this frame.
 This process stops when no frames are ready to be read from the TAP, or when the packet is dropped by the frontend.
 
 
@@ -676,8 +676,8 @@ The Linux kernel API has a specific network API that the network device driver u
 the rest of the kernel.
 
 With these API, the network driver can register a new network interface within the kernel, associating a name to it.
-The list of all the network interfaces currently registered within the kernel can be seen using the \texttt{ifconfig} utility or 
-similar tools.
+The list of all the network interfaces currently registered within the kernel can be seen using the \texttt{ifconfig} utility
+(e.g. \texttt{\$ ifconfig -a})or similar tools.
 The registering function, \texttt{register\_netdev}, requires as input argument a \texttt{netdev} structure that abstracts the
 registering network adapter. This structure contains all the information necessary to the kernel to use with the adapter.
 
@@ -712,6 +712,78 @@ The most important fields are:
 
 The \texttt{netdev\_ops} contains several methods, but we are intersted only in a few ones:
 \begin{itemize}
-    \item \texttt{ndo\_open}, which is called when the system administrator decide to bring the network interface up. This can be done
-	  using the \texttt{ifconfig} utility () or similar 
+    \item \texttt{ndo\_open}, which is called when the system administrator decides to bring the network interface up. This can be done
+	  using the \texttt{ifconfig} utility (e.g. \texttt{\#ifconfig eth0 up}) or similar. The driver should react to this request by
+	  setting up all the resource (software or hardware) necessary for the adapter operation.
+	  
+    \item \texttt{ndo\_close}, which is called when the system administrator decides to bring the network interface down, This can be
+	  done using the \texttt{ifconfig} utility (e.g. \texttt{\# ifconfig eth0 down} or similar. When receiving this request,
+	  the driver can release all the resource necessary for the adapter operation.
+	  
+    \item \texttt{ndo\_start\_xmit}, which is invoked by the kernel when it wants to transmit a new frame. The first argument is
+	  a pointer to a \texttt{sk\_buff} structure, which contains all the information related to the frame to transmit, including
+	  the frame itself. The \texttt{sk\_buff} structure is central to the Linux kernel networking, since all the layers in the 
+	  network stack perform actions on this structure.
+	 
 \end{itemize}
+
+At the end of the \texttt{ndo\_open} method, if everything is ok, the driver have to call the \texttt{netif\_start\_queue} function,
+that tell the kernel it can start transmitting frames through the network interface, namely can call the \texttt{ndo\_start\_xmit}
+method.
+
+\vspace{0.5cm}
+
+On the receive side, the kernel networking API provides the network driver with a way to pass a received frame up to the network
+stack, where the frame can find its way to its destination.
+The frame is handed off to the network stack as a \texttt{sk\_buff} structure, since the stack only works with this kind of structures.
+When receiving a frame from the adapter, therefore, the driver has to build a \texttt{sk\_buff} structure around the frame received
+and call the function \texttt{netif\_rx} with the built structure as parameter, in order to hand it off to the kernel.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.65]{linux-interface.pdf}
+\caption{On the bottom the interface between the network device driver and the network stack, and on the top the interface between
+user applications and the network stack.}
+\label{fig:linux-interface}
+\end{figure}
+
+
+\subsubsection{The NAPI interface}
+The receive interface described earlier is known as the ``older'' interface. The \texttt{netif\_rx} is intended to be invoked
+directly by the interrupt routine associated with an RX interrupt.
+
+However, as we pointed out earlier (see \ref{sec:e1000int}), the RX interrupt are source on uncontrolled load and must be moderated when
+the interrupt rate is too high. This can be done by hardware mechanisms, but a complementary software approach can still be useful.
+Moreover, a software interrupt moderation can be fundamental if hardware moderation is not provided by the network adapter.
+
+\vspace{0.5cm}
+
+The software approach is based on the concept of \emph{polling}. Interrupt operation was introduced in the early days of computing when
+the computer architects realized that when dealing with devices through polling most of the CPU cycles were thrown away because of
+busy waiting. Interrupt operation makes it possible to avoid busy waiting, even though it carries with it a fixed overhead, due to the
+context switches and scheduling operations, that is fairly high.
+
+Nevertheless, if there is (almost) always an hardware event to handle, busy waiting is not a problem, since there is nothing to wait for.
+Polling can therefore be used in situations where the input load is very high and so each time we want to check if there are more hardware
+event to handle we have an high probability that the answer is positive. The big advantage of polling on interrupt operation is that the 
+former does not have any overhead.
+
+\vspace{0.5cm}
+
+In conclusion, one cannot say in general that interrupt operation is better than polled operation or the other way around. When the hardware
+event rate (e.g. frame reception rate) is low enough, it's worth paying the fixed cost associated with interrupts but be sure that there
+is an event to handle. When the event rate is high enough, doing busy waiting it's cheaper than using interrupts, because the average cpu
+cycles wasted for each received frame is way lower than the cpu cycles wasted for the interrupt overhead.
+
+The NAPI (New API) interface has been designed with these considerations in mind. When a RX interrupt arrives, the driver interrupt routine
+could decide to switch to polling mode, and not to handle the received frame directly in the interrupt routine.
+This is done simply disabling the interrupt on the network adapter and scheduling a NAPI context. The latter action is done invoking the 
+function \texttt{napi\_schedule}.
+The NAPI context it's going to be executed in a kernel thread context different from the interrupt context. This is basically another form of
+deferred work.
+
+When the NAPI context is scheduled it executes the NAPI polling function registered by the driver (e.g. in the \texttt{ndo\_open} method)
+through the function \texttt{netif\_napi\_add}.
+
+The NAPI polling function has to do the receive work\footnote{or the interrupt work in general}. Of course the polling function is intended
+to process more RX frames. In order to prevent the polling function to kill the CPU...
