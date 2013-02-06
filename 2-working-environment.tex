@@ -760,30 +760,54 @@ Moreover, a software interrupt moderation can be fundamental if hardware moderat
 
 The software approach is based on the concept of \emph{polling}. Interrupt operation was introduced in the early days of computing when
 the computer architects realized that when dealing with devices through polling most of the CPU cycles were thrown away because of
-busy waiting. Interrupt operation makes it possible to avoid busy waiting, even though it carries with it a fixed overhead, due to the
-context switches and scheduling operations, that is fairly high.
+busy waiting. Interrupt operation makes it possible to avoid busy waiting, even if it carries with it a fixed overhead, due to the
+context switches and scheduling/dispatch operations, that is fairly high.
 
-Nevertheless, if there is (almost) always an hardware event to handle, busy waiting is not a problem, since there is nothing to wait for.
+Nevertheless, if there are (almost) always hardware events to handle, busy waiting is not a problem, since there is (almost) nothing to
+wait for.
 Polling can therefore be used in situations where the input load is very high and so each time we want to check if there are more hardware
-event to handle we have an high probability that the answer is positive. The big advantage of polling on interrupt operation is that the 
-former does not have any overhead.
+event to handle we have an high probability that the answer is positive. The big advantage of polling over interrupt operation is that
+the former does not have any overhead.
 
 \vspace{0.5cm}
 
 In conclusion, one cannot say in general that interrupt operation is better than polled operation or the other way around. When the hardware
-event rate (e.g. frame reception rate) is low enough, it's worth paying the fixed cost associated with interrupts but be sure that there
-is an event to handle. When the event rate is high enough, doing busy waiting it's cheaper than using interrupts, because the average cpu
-cycles wasted for each received frame is way lower than the cpu cycles wasted for the interrupt overhead.
+event rate (e.g. frame reception rate) is low enough, it's worth paying the fixed cost associated with interrupts in order to be sure that
+there is an event to handle. When the event rate is high enough, however, busy waiting it's cheaper than interrupts, because the average 
+cpu cycles wasted for each received frame is way lower than the cpu cycles wasted for the interrupt overhead.
+
+\vspace{0.5cm}
 
 The NAPI (New API) interface has been designed with these considerations in mind. When a RX interrupt arrives, the driver interrupt routine
-could decide to switch to polling mode, and not to handle the received frame directly in the interrupt routine.
+can decide to switch to polling mode, and not to handle the received frame directly.
 This is done simply disabling the interrupt on the network adapter and scheduling a NAPI context. The latter action is done invoking the 
 function \texttt{napi\_schedule}.
 The NAPI context it's going to be executed in a kernel thread context different from the interrupt context. This is basically another form of
 deferred work.
 
-When the NAPI context is scheduled it executes the NAPI polling function registered by the driver (e.g. in the \texttt{ndo\_open} method)
-through the function \texttt{netif\_napi\_add}.
+When the NAPI context is scheduled it executes the NAPI polling function registered by the driver through the function 
+\texttt{netif\_napi\_add} (this function registration could be done in the \texttt{ndo\_open} method).
 
 The NAPI polling function has to do the receive work\footnote{or the interrupt work in general}. Of course the polling function is intended
-to process more RX frames. In order to prevent the polling function to kill the CPU...
+to process more RX frames. In order to prevent the polling function to monopolize the CPU, however, there must be a limit on the work done
+by the polling function. This is the reason why the polling function is invoked with a \texttt{budget} input argument, that specifies the
+maximum number of RX frames to process.
+If the budget is comsumed entirely, the polling function should return, and the NAPI context will be rescheduled in the future, but
+the interrupt are not reenabled. In these way the NAPI keep polling the device as long as there is RX work to do.
+
+If the budget is comsumed only partially, however, the polling function should assume that it's not worth polling again, and switches back
+to interrupt operation. This is done calling the \texttt{napi\_complete} function, and then reenabling the adapter interrupts. The NAPI
+context won't be scheduled again until the next interrupt routine calls the \texttt{napi\_schedule} function.
+
+\vspace{0.5cm}
+
+In the end, using the NAPI interface allows the driver to switch between interrupt operation an polled operation depending on the current
+incoming traffic conditions, providing a form of interrupt moderation that can greatly increase the receive throughput.
+
+
+\section{The e1000 driver}
+Since an e1000 network adapter is a PCI device, the first thing the driver has to do when the e1000 kernel module is loaded is 
+registering a new PCI driver within the kernel PCI subsystem. The registration is done through the function \texttt{pci\_register\_driver},
+which is passed a \texttt{pci_driver} structure as input argument.
+
+The \texttt{pci_driver} structure contains all the information useful to the Linux PCI subsystem in order to manage the PCI device
