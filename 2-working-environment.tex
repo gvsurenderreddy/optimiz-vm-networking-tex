@@ -371,6 +371,7 @@ The figure \ref{fig:txring} depicts the TX ring with its index registers.
 
 
 \subsubsection{RX ring}
+\label{sec:rxring}
 The e1000 RX ring is an array of $N$ RX descriptors. Each RX descriptor is 16 bytes long and contains the address (in physical 
 memory) and the length of a frame that has been received by the adapter, or only the address of a memory location that can be
 used by the adapter to store an incoming frame. The descriptor contains also flags that can be used to specify options and status bits.
@@ -609,20 +610,108 @@ guest world.
 This said, we won't describe in detail all the aspects involved in e1000 emulation. Instead, we will outline the frame
 transmission and frame reception process, focusing on notifications, scheduling and memory copies.
 
-\subsection{TX handling}
+
+\subsection{TX emulation}
 As we wrote in section \ref{sec:txring}, a write to the TDT register is the way the driver notifies the hardware that new TX frames 
 are ready to be processed.
 The TDT register write callback updates the TDT value and then calls the \texttt{start\_xmit} function. This function is a while
 loop that processes all the committed TX descriptors, starting from the descriptor pointed by the TDH register. After each
 descriptor has been processed, the TDH register is incremented circularly. The while loop exits when TDT == TDH, e.g. there
 are no more TX descriptors to be processed.
+
 When a TX descriptor is processed, the following actions are performed:
 \begin{enumerate}
     \item The TX frame corresponding to the TX descriptor is copied from the guest memory in a local buffer.
     \item The TCP/UDP checksum is computed. Recall that e1000 devices are able to compute checksums in hardware, and so the OS 
 	  driver expects the emulated hardware to be able to do it.
     \item The descriptor is written back to the guest memory in order to report that the TX descriptor has been processed.
-    \item The \texttt{send\_packet} function is invoked in order to pass the frame to the network backend.
+    \item The \texttt{send\_packet} function is invoked in order to pass the frame to the network backend. With the TAP backend,
+	  a \texttt{write} system call is invoked to pass the frame to the TAP device associated with the backend.
 \end{enumerate}
 
-It's very important to note that all this operation are performed by the VCPU thread, that is the same thread.
+It's very important to observe that all these operations (frontend and backend) are performed by the same VCPU thread that tried to 
+execute the TDT write operation in the guest, causing a VMExit.
+This means that when the guest has only a VCPU (no SMP) the emulation of a transmission cannot be done in parallel with the guest, being
+done synchronously with the VCPU thread.
+
+\vspace{0.5cm}
+
+When all the pending TX descriptors have been processed, the interrupt pin associated with the e1000 adapter is raised (if it previous
+pin state was low), sending an interrupt to the guest.
+
+
+\subsection{RX emulation}
+When a receiving guest is waiting for new frames to come, the IOThread is blocked in the \texttt{select} system call.
+When a frame arrives to the TAP backend, the \texttt{select} returns and invokes the TAP network backend.
+The backend executes a \texttt{read} system call on the TAP device, extracting the incoming frame, and invoke the \texttt{send\_packet}
+function that passes the frame to the e1000 frontend, namely to the receive method \texttt{e1000\_receive}.
+
+According to what has been said in \ref{sec:rxring}, the \texttt{e1000\_receive} method perform the following actions:
+\begin{enumerate}
+    \item If RDH == RDT, there are no RX memory buffer available, and the incoming frame must be dropped.
+    \item The RX descriptor pointed by the RDH register is fetched from the guest memory.
+    \item The incoming frame is copied to the guest memory location at the address specified in the RX descriptor.
+    \item If not already high, the e1000 interrupt pin is raised.
+\end{enumerate}
+
+Differently from the TX emulation, here all these operations (frontend and backend) are executed by the IOThread, that can run in parallel
+with the VCPU thread (or the VCPU threads) executing the guest code.
+
+\vspace{0.5cm}
+
+When the \texttt{send\_packet} function returns, the backends tries to read another frame from the TAP\footnote{The \texttt{read}
+system call is non-blocking, since the IOThread is executing an event-loop, and so only the central \texttt{select} system call is
+allowed to block.}. If there is another frame to process, the \texttt{send\_packet} is called also on this frame.
+This process stops when no frames are ready to be read from the TAP, or when the packet is dropped by the frontend.
+
+
+
+\section{Linux e1000 device driver}
+In this section we will describe some details about the e1000 device driver code in the Linux kernel.
+We will only illustrate those aspects that are relevant to our goals.
+The driver source code can be found in the directory drivers/net/ethernet/intel/e1000 in the Linux kernel project root directory.
+
+\subsection{Interface with the kernel}
+The Linux kernel API has a specific network API that the network device driver uses in order to exchange network packets with
+the rest of the kernel.
+
+With these API, the network driver can register a new network interface within the kernel, associating a name to it.
+The list of all the network interfaces currently registered within the kernel can be seen using the \texttt{ifconfig} utility or 
+similar tools.
+The registering function, \texttt{register\_netdev}, requires as input argument a \texttt{netdev} structure that abstracts the
+registering network adapter. This structure contains all the information necessary to the kernel to use with the adapter.
+
+The most important fields are:
+\begin{itemize}
+    \item \texttt{name}, which is a string that univocally identifies the new network interface in the system.
+    
+    \item \texttt{netdev\_ops}, which is a structure containing the methods that the new network interface exports to the kernel 
+	  (see below).
+	  
+    \item \texttt{watchdog\_timeo}, which specifies the minimum time interval that the kernel should wait after a transmission is commited
+	  to the device driver before deciding that something could be wrong. When a transmission is committed, the watchdog timer 
+	  associated with the network interface is started. When the driver knows that the hardware it done with the committed frame,
+	  it release the associated TX buffer (in e1000 this can be done in the routine that handles the TX interrupt). On the release,
+	  the watchdog timer is cleared. If the timer fires, the \texttt{ndo\_tx\_timeout} method is called, and the driver could
+	  handle potential hardware hangs.
+	  
+    \item \texttt{hw\_features}, which is a bitmask that specifies to the kernel the features offered by the hardware that can be activated
+	  or deactivated by the user. The e1000 device driver specifies, among the others, the \texttt{NETIF\_F\_HW\_CSUM} (checksumming
+	  capability) feature, the \texttt{NETIF\_F\_SG} (scatter-gather capability) feature and \texttt{NETIF\_F\_TSO} (TCP Segmentation
+	  Offload capability).
+	  
+    \item \texttt{features}, which is a bitmask that represent the currently active features. This mask can be initialized to the same
+	  value as the \texttt{hw\_features} field, but can be modified by the users to set/unset features and fixed by the kernel in
+	  order to meet feature constraints\footnote{The features are not independent on each other within the kernel.}.
+	  
+    \item \texttt{dev\_addr} and \texttt{perm\_addr}, which contain the hardware address of the network adapter. As far as we are
+	  concerned, these two fields are set to the same value. In the e1000 adapter, the hardware address is read from an on-board
+	  EEPROM.
+\end{itemize}
+
+
+The \texttt{netdev\_ops} contains several methods, but we are intersted only in a few ones:
+\begin{itemize}
+    \item \texttt{ndo\_open}, which is called when the system administrator decide to bring the network interface up. This can be done
+	  using the \texttt{ifconfig} utility () or similar 
+\end{itemize}
