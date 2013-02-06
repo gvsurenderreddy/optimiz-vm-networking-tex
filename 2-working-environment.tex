@@ -667,11 +667,13 @@ This process stops when no frames are ready to be read from the TAP, or when the
 
 
 \section{Linux e1000 device driver}
-In this section we will describe some details about the e1000 device driver code in the Linux kernel.
+In this section we will describe some details about the e1000 device driver code in the Linux kernel, which is implemented as
+a kernel module.
 We will only illustrate those aspects that are relevant to our goals.
 The driver source code can be found in the directory drivers/net/ethernet/intel/e1000 in the Linux kernel project root directory.
 
 \subsection{Interface with the kernel}
+\label{sec:netapi}
 The Linux kernel API has a specific network API that the network device driver uses in order to exchange network packets with
 the rest of the kernel.
 
@@ -808,6 +810,21 @@ incoming traffic conditions, providing a form of interrupt moderation that can g
 \section{The e1000 driver}
 Since an e1000 network adapter is a PCI device, the first thing the driver has to do when the e1000 kernel module is loaded is 
 registering a new PCI driver within the kernel PCI subsystem. The registration is done through the function \texttt{pci\_register\_driver},
-which is passed a \texttt{pci_driver} structure as input argument.
+which is passed a \texttt{pci\_driver} structure as input argument.
 
-The \texttt{pci_driver} structure contains all the information useful to the Linux PCI subsystem in order to manage the PCI device
+The \texttt{pci\_driver} structure contains all the information useful to the Linux PCI subsystem to manage the PCI device.
+
+The most important fields are:
+\begin{itemize}
+    \item \texttt{id\_table}, which is a list of all the PCI devices managed by the driver to register. A PCI device is identified by
+	  a vendor ID and a device ID.
+    \item \texttt{probe}, which is a method that the PCI subsystem invokes when it detects that a new PCI device is attached to
+	  the PCI bus. The PCI subsystem invokes the probe method of the driver that manages the specific PCI device
+	  detected. The e1000 probe method initializes, configures and reset the board, an then registers a new network interface (see
+	  section \ref{sec:netapi}.
+    \item \texttt{remove}, which is a method that the PCI subsystem invokes to alert the driver that it should release the PCI device,
+	  because of a Hot-Plug event or because the driver is going to be removed from memory. The e1000 remove method undo all the
+	  operations done by the e1000 probe method, thus disabling the board.
+\end{itemize}
+
+Once the PCI subsystem invokes the e1000 probe method, a new e1000 network interface is registered within the kernel and is ready to be used.
