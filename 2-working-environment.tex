@@ -672,7 +672,7 @@ a kernel module.
 We will only illustrate those aspects that are relevant to our goals.
 The driver source code can be found in the directory drivers/net/ethernet/intel/e1000 in the Linux kernel project root directory.
 
-\subsection{Interface with the kernel}
+\subsection{Interface with the network stack}
 \label{sec:netapi}
 The Linux kernel API has a specific network API that the network device driver uses in order to exchange network packets with
 the rest of the kernel.
@@ -716,11 +716,14 @@ The \texttt{netdev\_ops} contains several methods, but we are intersted only in 
 \begin{itemize}
     \item \texttt{ndo\_open}, which is called when the system administrator decides to bring the network interface up. This can be done
 	  using the \texttt{ifconfig} utility (e.g. \texttt{\#ifconfig eth0 up}) or similar. The driver should react to this request by
-	  setting up all the resource (software or hardware) necessary for the adapter operation.
+	  setting up all the resource (software or hardware) necessary for the adapter operation. The e1000 \texttt{ndo\_open} method
+	  allocates and initialize all the resource necessary for TX/RX operation (e.g. RX and TX rings), initialize the registers,
+	  enables the e1000 interrupts and invokes the \texttt{netif\_start\_queue} function, which tell the kernel it can start invoking
+	  the \texttt{ndo\_start\_xmit} method (see below).
 	  
     \item \texttt{ndo\_close}, which is called when the system administrator decides to bring the network interface down, This can be
 	  done using the \texttt{ifconfig} utility (e.g. \texttt{\# ifconfig eth0 down} or similar. When receiving this request,
-	  the driver can release all the resource necessary for the adapter operation.
+	  the driver can release all the resource allocated by the \texttt{ndo\_open} method.
 	  
     \item \texttt{ndo\_start\_xmit}, which is invoked by the kernel when it wants to transmit a new frame. The first argument is
 	  a pointer to a \texttt{sk\_buff} structure, which contains all the information related to the frame to transmit, including
@@ -728,10 +731,6 @@ The \texttt{netdev\_ops} contains several methods, but we are intersted only in 
 	  network stack perform actions on this structure.
 	 
 \end{itemize}
-
-At the end of the \texttt{ndo\_open} method, if everything is ok, the driver have to call the \texttt{netif\_start\_queue} function,
-that tell the kernel it can start transmitting frames through the network interface, namely can call the \texttt{ndo\_start\_xmit}
-method.
 
 \vspace{0.5cm}
 
@@ -806,17 +805,19 @@ context won't be scheduled again until the next interrupt routine calls the \tex
 In the end, using the NAPI interface allows the driver to switch between interrupt operation an polled operation depending on the current
 incoming traffic conditions, providing a form of interrupt moderation that can greatly increase the receive throughput.
 
+The e1000 driver currently use the NAPI interface instead the older one.
 
-\section{The e1000 driver}
+
+\subsection{Interface with the PCI subsystem}
 Since an e1000 network adapter is a PCI device, the first thing the driver has to do when the e1000 kernel module is loaded is 
 registering a new PCI driver within the kernel PCI subsystem. The registration is done through the function \texttt{pci\_register\_driver},
-which is passed a \texttt{pci\_driver} structure as input argument.
+which accept a \texttt{pci\_driver} structure as input argument.
 
 The \texttt{pci\_driver} structure contains all the information useful to the Linux PCI subsystem to manage the PCI device.
 
 The most important fields are:
 \begin{itemize}
-    \item \texttt{id\_table}, which is a list of all the PCI devices managed by the driver to register. A PCI device is identified by
+    \item \texttt{id\_table}, which is a list of all the PCI devices managed by the driver. A PCI device is identified by
 	  a vendor ID and a device ID.
     \item \texttt{probe}, which is a method that the PCI subsystem invokes when it detects that a new PCI device is attached to
 	  the PCI bus. The PCI subsystem invokes the probe method of the driver that manages the specific PCI device
@@ -824,7 +825,149 @@ The most important fields are:
 	  section \ref{sec:netapi}.
     \item \texttt{remove}, which is a method that the PCI subsystem invokes to alert the driver that it should release the PCI device,
 	  because of a Hot-Plug event or because the driver is going to be removed from memory. The e1000 remove method undo all the
-	  operations done by the e1000 probe method, thus disabling the board.
+	  operations done by the e1000 probe method, disabling the adapter.
 \end{itemize}
 
-Once the PCI subsystem invokes the e1000 probe method, a new e1000 network interface is registered within the kernel and is ready to be used.
+Once the PCI subsystem invokes the e1000 probe method, a new e1000 network interface is registered within the kernel and is ready to be
+used.
+
+
+\subsection{TX operation}
+\label{sec:txdriver}
+As outlined in section \ref{sec:netapi}, when the network stack decides to send a packet through the e1000 adapter, the e1000
+\texttt{ndo\_start\_xmit} method is invoked. What the driver has to do is extracting the frame data and other useful information from the 
+input \texttt{sk\_buff} structure, and commit the frame to the adapter. The first byte of the frame is stored at the address contained
+in the \texttt{data} field of the structure.
+
+The input \texttt{sk\_buff} can be \emph{linear} or \emph{non-linear}. If linear, the frame is a stored in a contiguous memory area
+\footnote{Being kernel \emph{logic} addresses, the frame is contiguous both in virtual and physical memory.}.
+If non-linear, the frame is not contiguous, but is stored as a collection of contiguous fragments, e.g. a scatter-gather array.
+
+\vspace{0.5cm}
+
+In order to write the TDT register only when necessary, the driver has a shadow variable, \texttt{tx\_next\_to\_use}, that is intended to
+be used in place of the TDT when possible. The TDT register is updated with the variable content only when the driver wants to commit a 
+frame to the hardware. In this way is never necessary to read the TDT register, since one can read the shadow variable instead.
+
+Similarly, there is a shadow variable, \texttt{tx\_next\_to\_clean}, also for the TDH register. The shadow variable is incremented
+once for each used TX descriptor that has the DD bit set (see below). In this way it's never never necessary
+to read the TDH register, since one can read the shadow variable instead\footnote{Recall that
+the driver normally does not need to write the TDH register, except for register initialization.}.
+
+Even though the driver wasn't written with virtualization problems in mind, this is extremely useful, because accessing a register cause
+an expensive VMExit, while accessing memory is done at native speed.
+
+\vspace{0.5cm}
+
+Moreover, in order to keep trace of per-descriptor information that can be used to release the resources when the transmission is done, 
+the driver mantains an array parallel to the TX ring, the \texttt{tx\_buffer\_info} array.
+As an example, some elements in this parallel array contain a valid pointer to the \texttt{sk\_buff} structure passed by the kernel. Since
+this structure (data included) are dynamically allocated, the driver can free its memory, but only when it is sure that the frame 
+contained has actually been sent by the hardware (as we will see, this is done by the TX interrupt routine).
+
+\vspace{0.5cm}
+
+In more detail, the e1000 \texttt{ndo\_start\_xmit} method does the following:
+\begin{itemize}
+    \item Checks if there are enough free TX descriptors for the frame to send. If not, returns immediately reporting the adapter as busy.
+          Since the \texttt{sk\_buff} can be non-linear, we have to use a different TX descriptor for each fragment. Moreover, an additional
+	  context descriptor may be necessary in order to make a offload requests on the current frame (see \ref{sec:txring}.
+
+    \item If necessary, inserts a new context descriptor in the TX ring location pointed by the \texttt{tx\_next\_to\_use} variable, and
+	  increment the variable. The context descriptor refers to the following data TX descriptors.
+	  The \texttt{ip\_summed} field in the \texttt{sk\_buff} structure says if the frame need to be checksummed. The \texttt{gso\_size}
+	  field of the \texttt{skb\_shared\_info} structure associated with the \texttt{sk\_buff} says if the frame need TCP Segmentation
+	  Offload.
+
+    \item Maps all the frame fragments into DMA-capable physical memory (DMA mapping). The mapping is necessary to tell the kernel that
+	  we are going to access the memory regions with DMA. The mapping function returns the physical addresses corresponding to each
+	  fragment, and it doesn't perform a copy. An entry of the \texttt{tx\_buffer\_info} array is used for each fragment to store
+	  its physical address and length. A pointer to the input \texttt{sk\_buff} is stored in the entry corresponding to the last
+	  fragment. Being the array parallel to the TX ring, the driver starts to use the entry pointed by the \texttt{tx\_next\_to\_use} 
+	  variable (but don't increment the variable itself, since it will be incremented in the next step).
+	  
+    \item Insert in the TX ring a data TX descriptor for each frame fragment, using the information just stored in the parallel array,
+	  and incrementing \texttt{tx\_next\_to\_use} by the number of fragments.
+	  
+    \item Write TDT with the \texttt{tx\_next\_to\_use} content, in order to commit the new frame to the hardware.
+\end{itemize}
+
+From the previous list follows that the driver needs to do some per-frame cleanup operations after the hardware has actually sent the
+frame. This is the reason why TX interrupts are enabled.Therefore, after the hardware has sent one or more frames, it eventually 
+raises an interrupt.
+
+Since the e1000 driver uses the NAPI, the interrupt routine disables the e1000 interrupts and schedules the NAPI context.
+The e1000 NAPI polling function, \texttt{e1000\_clean}, is (also) in charge of doing the TX cleanup work. This work is done invoking
+the function \texttt{e1000\_clean\_tx\_irq}.
+
+Starting from the entry pointed by \texttt{tx\_next\_to\_clean}, the polling function fetch the TX descriptors to see what descriptors have
+the DD bit set, and so have been processed (used) by the hardware. For each used descriptor, it releases the TX resources using the
+information stored in the corrisponding entry in the parallel \texttt{tx\_buffer\_info} array. In more detail, the driver undoes the DMA
+mapping of each data TX descriptor and frees the \texttt{sk\_buff} of the last data TX descriptor associated with each frame sent.
+
+
+\subsection{RX operation}
+In order to write the RDT register only when necessary, the driver has a shadow variable, \texttt{rx\_next\_to\_use}, that is intended to
+be used in place of the RDT when possible. The RDT register is updated with the variable content only when the driver wants to give new
+memory buffers to the hardware. In this way is never necessary to read the RDT register, since one can read the shadow variable instead.
+
+Similarly, there is a shadow variable, \texttt{rx\_next\_to\_clean}, also for the RDH register. The shadow variable is incremented
+once for each used RX descriptor that has the DD bit set (see below). In this way it's never never necessary
+to read the RDH register, since one can read the shadow variable instead\footnote{Recall that the driver normally does not need to write
+the RDH register, except for register initialization.}.
+
+Once again, the shadow variables are extremely useful to minimize the number of VMExit.
+
+\vspace{0.5cm}
+
+Similarly to what happens for the TX operation, the driver mantains an array parallel to the RX ring, the \texttt{rx\_buffer\_info} array,
+in order to keep trace of per-descriptor information that can be used to release the resources when the reception is completed.
+As an example, each entry in this parallel array contains the DMA-mapped physical address of a memory buffer used by the adapter to
+receive a frame. The driver must undo the DMA-mapping, but only after the memory buffer has been used by the hardware.
+
+\vspace{0.5cm}
+
+When initializing the the resources for RX operation, the e1000 \texttt{ndo\_open} method also calls the \texttt{e1000\_alloc\_rx\_buffers}
+function with $N-1$ as \texttt{cleaned\_count} input parameter so that this function allocates $N-1$ memory buffers to be used for frame 
+reception (see \ref{sec:rxring}). In this way the adapter can accept incoming frames as soon as the reception is enabled in the hardware.
+
+In more detail, for each buffer to allocate, the \texttt{e1000\_alloc\_rx\_buffers} function
+\begin{enumerate}
+    \item Allocates a new \texttt{sk\_buff} structure that has enough data room to store a maximum size ethernet frame.
+    
+    \item Stores a pointer to the \texttt{sk\_buff} into the entry of the \texttt{rx\_buffer\_info} array indexed by the 
+	  \texttt{rx\_next\_to\_use} content. In this way this pointer can be
+	  passed to the network stack by the RX interrupt routine after the memory buffer contained into the \texttt{sk\_buff} itself
+	  is used by the hardware.
+	  
+    \item Maps the memory buffer so that it can be accessed in DMA, similarly to what happens for TX frames (see section 
+	  \ref{sec:txdriver}). The physical address of the memory buffer is stored in the same \texttt{rx\_buffer\_info} entry.
+	  
+    \item The buffer physical address is written into the RX descriptor corresponding the the \texttt{rx\_buffer\_info} entry\footnote{
+	  Recall that the RX ring and the \texttt{rx\_buffer\_info} arrays are parallel}.
+	  
+    \item The \texttt{rx\_next\_to\_use} variable is incremented. If is the case (see below) the RDT register is then updated with the 
+	  \texttt{rx\_next\_to\_use} content.
+\end{enumerate}
+
+A write to the RDT register is performed every 16 allocated memory buffers, and at end of the \texttt{e1000\_alloc\_rx\_buffers} function.
+
+There is a tradeoff here: Writing the RDT at each iteration would be too slow, and writing the RDT only at the end of the function would
+cause the receive side to be poorly reactive.
+
+\vspace{0.5cm}
+
+After one or more new frames are received and stored in the physical memory, an interrupt is eventually raised.
+The interrupt routine disables the e1000 interrupt and schedules the NAPI context (see \ref{sec:txdriver}).
+The e1000 polling function is also in charge of doing the RX work.
+
+Though the e1000 adapters are able to receive also \emph{jumbo} frames\footnote{ethernet frames that can carry up to 9000 bytes of payload},
+in the following we will describe only what happens when conventional ethernet frame are used\footnote{Anyway, the jumbo frame handling 
+it's not very different.}.
+
+In order to do the RX work, the e1000 polling function invokes the \texttt{e1000\_clean\_rx\_irq} function.
+This function starts to fetch and clean RX descriptors beginning from the one indexed by the \texttt{rx\_next\_to\_clean} content.
+It keeps working while the NAPI budget is exhausted and the descriptors have the DD bit is set. The latter indicates that the RX descriptor
+has been used by the hardware to receive a frame.
+
+For each RX descriptor, the corresponding entry in the parallel \texttt{rx\_buffer\_info} array
