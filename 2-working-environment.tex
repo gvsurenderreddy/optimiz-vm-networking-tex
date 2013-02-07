@@ -1,4 +1,6 @@
 \chapter{Working environment}
+\label{chap:env}
+
 In section \ref{sec:vmclass} we introduced a classification of Virtual Machine systems.
 
 The work presented in this thesis is restricted to same-ISA System Virtual Machines, where the Virtual Machine Monitor is a type 2 VMM.
@@ -344,9 +346,17 @@ it writes the physical address and the length of the frame in the TX descriptor 
 register itself. Since the descriptor array is circular, the TDT must be set adequately.
 
 When the adapter recognizes that TDH is different by TDT, is knows that there are new frames to transmit, and start processing the
-descriptor pointed by TDH, sending on the wire the frame pointed by the descriptor (if is the case), and then increments the TDH register.
-The adapter stops the processing only when TDH has the same content as TDT has. A write access to the TDT register is therefore the
-way the device driver notifies the adapter that there are new frames ready to be sent.
+descriptor pointed by TDH. A write access to the TDT register is therefore the way the device driver notifies the adapter that 
+there are new frames ready to be sent.
+
+For each descriptor to process:
+\begin{enumerate}
+  \item The frame pointed by the decriptor is sent on the wire.
+  \item The TX descriptor is written back in order to set the DD (Descriptor Done) bit that indicates the TX descriptor has been
+	processed.
+  \item The TDH register is incremented circularly.
+\end{enumerate}
+The adapter stops the processing only when TDH == TDT, e.g. there are no more descriptors to process.
 
 When the driver increments the TDT, the descriptor previously pointed (the one that has just been written) is committed to the hardware,
 and the hardware owns it until the decriptor is processed.
@@ -368,6 +378,18 @@ The figure \ref{fig:txring} depicts the TX ring with its index registers.
 	contains hardware-owned descriptors.}
 \label{fig:txring}
 \end{figure}
+
+\paragraph{Multi-descriptor frames}
+Sometimes a frame is not stored contiguously in physical memory, or it's bigger than 4KB. In these cases the frame to transmit cannot
+be specified with a single TX descriptor, but many consecutive TX descriptor must be used. The last TX descriptor describing a frame
+must have the EOP (End Of Packet) bit set.
+
+\paragraph{Context descriptors}
+There are actually two generations of TX descriptors: Legacy descriptors and Extended descriptors, the latter being the most
+recent ones.
+When extended descriptors are used (this is normally the case), hardware offloading requests can be specified for each TX frame to send
+by putting a so called \emph{context} descriptor in the TX ring before inserting the regular data TX descriptor(s).
+Linux device driver makes use of extended TX descriptors and context descriptors.
 
 
 \subsubsection{RX ring}
@@ -391,11 +413,16 @@ A write access to the RDT register is therefore the way the device driver notifi
 to be used to store incoming frames.
 
 If the adapter sees that RDH is different by RDT, it recognizes to have memory buffers available, and starts accepting incoming frames.
-When a new frame arrives from the wire, the adapter fetches the RX descriptor pointed by the RDH register, copies the frame to the address
-contained in the RX descriptor, writes back the length of the received frame to the RX descriptor itself and increments the RDH register
-circularly.
-At this point, if programmed to do so, the device would normally sent an interrupt (see section \ref{sec:e1000int}, in order to tell
+When a new frame arrives from the wire, the adapter
+\begin{enumerate}
+    \item Fetches the RX descriptor pointed by the RDH register.
+    \item Copies the frame to the address contained in the RX descriptor.
+    \item Writes back the descriptor in order to write the length of the received frame, and to set the DD (Descriptor Done) bit.
+	  The DD bit indicates that the RX descriptor has been used to receive a frame.
+    \item Increments the RDH register circularly.
+    \item If programmed to do so, the device would normally sent an interrupt (see section \ref{sec:e1000int}), in order to tell
 the driver there are new received frames ready to be pushed to the kernel network stack.
+\end{enumerate}
 
 When the driver increments the RDT, the descriptor previously pointed (the one that has just been written) is committed to the hardware,
 and the hardware owns it until the decriptor is used.
@@ -530,7 +557,7 @@ The figure \ref{fig:rdtrstate} shows a state diagram associated to the RDTR time
 \label{fig:rdtrstate}
 \end{figure}
 
-The figures \ref{fig:radv} and \ref{rdtrradv} depict some examples about the RDTR and RADV moderation mechanism.
+The figures \ref{fig:radvonly} and \ref{fig:rdtrradv} depict some examples about the RDTR and RADV moderation mechanism.
 
 \begin{figure}[bt]
 \centering
@@ -900,9 +927,9 @@ Since the e1000 driver uses the NAPI, the interrupt routine disables the e1000 i
 The e1000 NAPI polling function, \texttt{e1000\_clean}, is (also) in charge of doing the TX cleanup work. This work is done invoking
 the function \texttt{e1000\_clean\_tx\_irq}.
 
-Starting from the entry pointed by \texttt{tx\_next\_to\_clean}, the polling function fetch the TX descriptors to see what descriptors have
-the DD bit set, and so have been processed (used) by the hardware. For each used descriptor, it releases the TX resources using the
-information stored in the corrisponding entry in the parallel \texttt{tx\_buffer\_info} array. In more detail, the driver undoes the DMA
+Starting from the entry pointed by \texttt{tx\_next\_to\_clean}, the polling function fetches the TX descriptors to see what descriptors
+have the DD bit set, and so have been processed (used) by the hardware. For each used descriptor, it releases the TX resources using the
+information stored in the corresponding entry in the parallel \texttt{tx\_buffer\_info} array. In more detail, the driver undoes the DMA
 mapping of each data TX descriptor and frees the \texttt{sk\_buff} of the last data TX descriptor associated with each frame sent.
 
 
@@ -970,4 +997,20 @@ This function starts to fetch and clean RX descriptors beginning from the one in
 It keeps working while the NAPI budget is exhausted and the descriptors have the DD bit is set. The latter indicates that the RX descriptor
 has been used by the hardware to receive a frame.
 
-For each RX descriptor, the corresponding entry in the parallel \texttt{rx\_buffer\_info} array
+For each RX descriptor to clean
+\begin{enumerate}
+    \item The used memory buffer is DMA-unmapped. The buffer physical address is taken from the \texttt{rx\_buffer\_info} entry
+	  corresponding to the RX descriptor.
+
+    \item If the received frame is shorter than 256 byte\footnote{This number is a kernel parameter that can be tuned by the user.},
+	  the copybreak mechanism fires: A new minimum size \texttt{sk\_buff} structure is allocated and the frame data are copied,
+	  while the old \texttt{sk\_buff} will be recycled. This should improve packet loss for small packets, because the socket
+	  receive queues get full earlier if the enqueued \texttt{sk\_buff} are bigger.
+	  
+    \item Some fields of the \texttt{sk\_buff} structure which contains the frame data are properly initialized\footnote{For example the
+	  \texttt{ip\_summed} and the \texttt{protocol} fields.} and the frame
+	  is handed off to the network stack (see the \texttt{e1000\_receive\_skb}) function. A pointer to that structure is
+	  taken from the same \texttt{rx\_buffer\_info} entry, if the copybreak mechanism did not fire.
+\end{enumerate}
+
+

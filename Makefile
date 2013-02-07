@@ -4,5 +4,5 @@ all: *.tex
 	pdflatex thesis.tex
 
 clean:
-	-rm *.aux *.lof *.log *.lot *.pdf *.toc
+	-rm *.aux *.lof *.log *.lot thesis.pdf *.toc
 	
