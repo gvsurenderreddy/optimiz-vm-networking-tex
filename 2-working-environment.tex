@@ -84,6 +84,7 @@ In this section we will illustrate those details of QEMU implementation that are
 goals.
 
 \subsection{QEMU event-loop}
+\label{sec:qemuel}
 QEMU is an event-loop based software, and is implemented as a single-process multi-threaded application. 
 One thread, referred to as \emph{IOThread}, executes the event-loop, waiting for new events to happen\footnote{This is 
 implemented in \texttt{main-loop.c}}.
@@ -513,6 +514,7 @@ interrupt moderation mechanism could be implemented using the RS bit.}.
 The e1000 class of network adapters implements two interrupt moderation mechanisms.
 
 \subsubsection{The older moderation mechanism}
+\label{sec:oldmit}
 The older mechanism is supported by the registers TIDV (Transmit Interrupt Delay Value), TADV (Transmit Absolute Interrupt Delay Value),
 RDTR ( and RADV, where each register is provided with a countdown timer.
 
@@ -575,6 +577,7 @@ The figures \ref{fig:radvonly} and \ref{fig:rdtrradv} depict some examples about
 
 
 \subsubsection{The newer moderation mechanism}
+\label{sec:itrmit}
 Although the older mechanisms allows for fine grained control over the moderation, expecially on the TX side, most of the times the 
 required moderation functionality is way simpler. For these reason a more direct moderation mechanism has been added, which is implemented
 through the ITR register (Interrupt Throttling Register).
@@ -592,6 +595,7 @@ and use the ITR instead.
 
 
 \section{QEMU e1000 emulation}
+\label{sec:e1000emu}
 The \emph{e1000} device is implemented in QEMU through a single source file\footnote{hw/e1000.c in the QEMU project root directory}.
 This code contained in this file is also referred to as the e1000 \emph{frontend}, according to the terminology introduced in section
 \ref{sec:frontback}.
@@ -606,7 +610,7 @@ When registering a new BAR, you can specify the callback functions that are invo
 a location in a region.
 
 The e1000 emulation code registers a MMIO region and an I/O region. The I/O region isn't actually used, whereas
-the MMIO region maps all the registers the e1000 device implement, such as TDT, TDH, RADV, TIDV and so on.
+the MMIO region maps all the registers the e1000 device implement, such as TDT, TDH, RDH and so on.
 
 A couple of statically defined dispatch tables, one for the read accesses and the other for the write accesses, are used to associate a
 different function to each register.
@@ -639,6 +643,7 @@ transmission and frame reception process, focusing on notifications, scheduling 
 
 
 \subsection{TX emulation}
+\label{sec:e1000txemu}
 As we wrote in section \ref{sec:txring}, a write to the TDT register is the way the driver notifies the hardware that new TX frames 
 are ready to be processed.
 The TDT register write callback updates the TDT value and then calls the \texttt{start\_xmit} function. This function is a while
@@ -656,18 +661,21 @@ When a TX descriptor is processed, the following actions are performed:
 	  a \texttt{write} system call is invoked to pass the frame to the TAP device associated with the backend.
 \end{enumerate}
 
+When all the pending TX descriptors have been processed, the interrupt pin associated with the e1000 adapter is raised (if it previous
+pin state was low), sending an interrupt to the guest. The interrupt moderation registers (see sections \ref{sec:oldmit} and 
+\ref{sec:itrmit}) are not implemented.
+
+\vspace{0.5cm}
+
 It's very important to observe that all these operations (frontend and backend) are performed by the same VCPU thread that tried to 
 execute the TDT write operation in the guest, causing a VMExit.
 This means that when the guest has only a VCPU (no SMP) the emulation of a transmission cannot be done in parallel with the guest, being
 done synchronously with the VCPU thread.
 
-\vspace{0.5cm}
-
-When all the pending TX descriptors have been processed, the interrupt pin associated with the e1000 adapter is raised (if it previous
-pin state was low), sending an interrupt to the guest.
 
 
 \subsection{RX emulation}
+\label{sec:e1000rxemu}
 When a receiving guest is waiting for new frames to come, the IOThread is blocked in the \texttt{select} system call.
 When a frame arrives to the TAP backend, the \texttt{select} returns and invokes the TAP network backend.
 The backend executes a \texttt{read} system call on the TAP device, extracting the incoming frame, and invoke the \texttt{qemu\_send\_packet}
@@ -694,6 +702,7 @@ This process stops when no frames are ready to be read from the TAP, or when the
 
 
 \section{Linux e1000 device driver}
+\label{sec:e1000driver}
 In this section we will describe some details about the e1000 device driver code in the Linux kernel, which is implemented as
 a kernel module.
 We will only illustrate those aspects that are relevant to our goals.
@@ -777,6 +786,7 @@ user applications and the network stack.}
 
 
 \subsubsection{The NAPI interface}
+\label{sec:napi}
 The receive interface described earlier is known as the ``older'' interface. The \texttt{netif\_rx} is intended to be invoked
 directly by the interrupt routine associated with an RX interrupt.
 
@@ -934,6 +944,7 @@ mapping of each data TX descriptor and frees the \texttt{sk\_buff} of the last d
 
 
 \subsection{RX operation}
+\label{sec:rxdriver}
 In order to write the RDT register only when necessary, the driver has a shadow variable, \texttt{rx\_next\_to\_use}, that is intended to
 be used in place of the RDT when possible. The RDT register is updated with the variable content only when the driver wants to give new
 memory buffers to the hardware. In this way is never necessary to read the RDT register, since one can read the shadow variable instead.
