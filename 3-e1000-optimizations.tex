@@ -303,6 +303,7 @@ We've not discussed the performances with bigger packet sizes, for the same reas
 
 
 \section{Implementing interrupt moderation}
+\label{sec:e1000-mit}
 In section \ref{sec:e1000txperf} we have seen that we can improve both the RX and TX packet rate if we emulate the e1000 mitigation.
 A precise emulation is not necessary nor possible, and it's therefore convenient to choose a simple and efficient one.
 In this work we decide to implement the ITR register, the TADV register and the RADV register.
@@ -339,11 +340,10 @@ In this way we are sure that the minimum inter-interrupt interval is always grea
 
 The proposed moderation patch adds about 50 lines of code to the e1000 frontend (hw/e1000.c).
 
+\vspace{0.5cm}
 
-
-\subsection{Improvements analysys}
-In this section we will repeat the same experiments presented in section \ref{sec:e1000perf} in order to see the improvements obtained
-with the the moderation patch. With this experiment the Linux e1000 module has been loaded specifying the following parameters:
+In the following sections we will repeat the same experiments presented in section \ref{sec:e1000perf} in order to see the improvements
+obtained with the the moderation patch. With this experiment the Linux e1000 module has been loaded specifying the following parameters:
 \begin{center}
 \begin{tabular}{ll}
 \toprule
@@ -362,8 +362,8 @@ Allowed Interrupt Rate (MAIR), which is inversely proportional to the value that
 the interrupt rate.
 
 \subsection{TX performance}
-\label{sec:e100-mit-tx}
-The results n the 1-VCPU case is shown in table \ref{tab:e1000-mit-tx-g2h1vcpu}.
+\label{sec:e1000-mit-tx}
+The results in the 1-VCPU case is shown in table \ref{tab:e1000-mit-tx-g2h1vcpu}.
 
 \begin{table}
 \begin{center}
@@ -458,7 +458,7 @@ The table \ref{tab:e1000-mit-rx-g2h1vcpu} shows the results obtained when the in
 As we can see, there is a huge improvement in the packet rate performance, because on average we amortize the interrupt related overhead
 over about 35 frames. Since the interrupt rate is lower, also the RX notification rate is lower. On average we should expect 
 $\lfloor \frac{35}{16} \rfloor + 1 = 3$ RDT writes for each interrupt (see section \ref{sec:rxdriver}), and so a notification rate of 
-about $3 \cdot 3.838 KHz = 11.514 KHz$, which is similar to the measured one (10.332 KHz).
+about $3 \cdot 3.838$ KHz = 11.514 KHz, which is similar to the measured one (10.332 KHz).
 
 If we increase the incoming RX rate, the performance of the UDP receiver gradually degrades, but we don't incur in a complete livelock 
 (like the livelock we have seen in section \ref{sec:e1000-rx-g2h1vcpu}), because the interrupt rate is bounded.
@@ -507,5 +507,226 @@ NAPI moderation to play an active role.
 The measured critical rate is about 215 Kpps (+37\% w.r.t. 1-VCPU case).
 We can see that the NAPI mitigation is effective observing that the average interrupt rate is half part of the MAIR, and so the MAIR is not
 restrictive at operating speed. On average we have about 103 RX frames served for each interrput, which a very good result.
-The expected average RX notification rate is $(\lfloor \frac{103}{16} \rfloor + 1) \cdot 2.098$ Khz = 14.686, which is very similar to
+The expected average RX notification rate is $(\lfloor \frac{103}{16} \rfloor + 1) \cdot 2.098$ Khz = 14.686 KHz, which is very similar to
 the measured result (14.321 KHz).
+
+
+
+
+\section{Implementing TDT write batching}
+In section \ref{sec:e1000-mit} we have seen how RX/TX packet rate performances can be improved with a minimal patch to the
+e1000 frontend that implements an interrupt moderation mechanism.
+However, the TX notification problem still exists and limits TX performances. The interrupt moderation mechanism cannot help to mitigate
+this problem. For these reasons, we propose a TDT \emph{write batching} algorithm, which will be explained in the following section.
+
+
+\subsection{Implementation}
+A simple approach would be to coalesce TX notification using a counter variable. The counter is initialized to zero and is incremented 
+every time the \texttt{ndo\_start\_xmit} method is invoked. A TDT write is done to notify the pending transmission only when the counter 
+reaches a threshold, e.g. 20. Each time we notify we also set the counter to 0.
+In this way we are able to reduce the TX notification rate by 20 times.
+Unfortunately this approach would stop working when the guest stop transmitting, because we don't have a way to timely notify pending 
+transmits, if any. Moreover, the \texttt{ndo\_xmit\_method} cannot know when it will be invoked again in the future. 
+For these reasons we should use a kernel timer in order to notify pending transmit after a period of TX inactivity. This timer should be
+(re)armed every time we don't notify, and so 19 times over 20. This is quite expensive.
+Moreover, the user should have to choose the threshold value and the timer delay value, and this would add complexity and discourage the
+users.
+
+In order to get to a zero-configuration and simple implementation we have adopted an other approach.
+
+\vspace{0.5cm}
+
+The idea is to use the interrupt itself as a timer mechanism, and thus the interrupt routine as a timer callback.
+We use a variable, \texttt{bat\_pending}, which is set to 1 to indicate that there is a pending interrupt that will come soon, and is set 
+to 0 when there is not a pending interrupt. The variable is initialized to 0.
+When the \texttt{ndo\_xmit\_method} is called for the first time, \texttt{bat\_pending} is 0 and so the notification is done and 
+\texttt{bat\_pending} is set to 1.
+If the \texttt{ndo\_xmit\_method} is called again before the TX interrupt (due to the previous notification) comes, \texttt{bat\_pending}
+is 1 and so we don't notify.
+When the interrupt comes, at the begin of the NAPI polling function (the interrupt are disabled), if there are pending transmissions we do 
+a notification, but we don't set \texttt{bat\_pending} to 0, because the notification we have done will cause another interrupt.
+If there are no pending notifications we set \texttt{bat\_pending} to 0, because we don't know when the next interrupt is going to be, and
+so we don't want to miss the next notification.
+
+Note that this algorithm works well only if there is time for the guest to call the \texttt{ndo\_xmit\_method} before the an interrupt
+comes. For instance, this can happen if interrupt moderation is implemented, since TX interrupts are delayed.
+
+\vspace{0.5cm}
+
+The proposed patch includes a few other implementation details that are not very interesting. for instance, we have to hold a spinlock
+while writing to the tdt register and updating the other variables related to the batching mechanism, because we perform this write
+accesses both in the \texttt{ndo\_start\_xmit} method and in the napi polling function, and so we need mutual exclusion.
+in addition to that, when we have to chek if there are pending transmissions, we should read from the TDT register, but this would be 
+counter-productive,and so we mantain a shadow variable (\texttt{bat\_software\_tdt}) that is always coherent with the tdt content.
+Finally, when writing to the TDT register from the interrupt routine we cannot read from \texttt{tx\_next\_to\_use}, since its value
+is modified without the spinlock held. The \texttt{bat\_shadow\_ntu} is used to take coherent snapshots of the \texttt{tx\_next\_to\_use}
+variable.
+The batching patch adds about 35 lines of code to the e1000 driver.
+The user can enable or disable the batching mechanism writing 0 or 1 to the \texttt{batching} module parameter.
+
+
+\subsection{Improvement analysis}
+\label{sec:e1000-mit-bat-tx}
+In section we will repeat the same experiments presented in section \ref{sec:e1000-mit-tx} in order to see the improvements
+obtained with the the batching patch and the moderation patch. The Linux e1000 module has been loaded specifying the same parameters 
+plus the \texttt{batching} parameter, which has been set to 1.
+
+\subsubsection{1-VCPU test}
+The results in the 1-VCPU case is shown in table \ref{tab:e1000-mit-bat-tx-g2h1vcpu}.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 1.848 & KHz\\
+\textbf{TX packet rate} & 163.519 & Kpps\\
+\textbf{TX bitrate} & 119.042 & Mbps\\
+\textbf{TX notifications rate} & 1.847 & KHz\\
+\textbf{MMIO write rate} & 5.546 & KHz\\
+\textbf{MMIO read rate} & 5.605 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Guest to host statistics with 1 VCPU per guest when interrupt moderation is implemented and TDT write batching is enabled.}
+\label{tab:e1000-mit-bat-tx-g2h1vcpu}
+\end{table}
+
+As we can see there is a big improvement in the TX rate with respect to the previous solutions (existing implementation with or without
+the moderation patch), because now we have only one TX notification for each interrupt. At this point we have mitigated
+both interrupts and TX notifications and there is nothing else to mitigate.
+However, the TX path still does not work at his best, because the TX emulation is still demanded to the VCPU thread that executes a
+TX notification (section \ref{sec:e1000txemu}). In other words, the processing is synchronous, while in the RX path the emulation can 
+go parallel with the guest.
+
+The TDT write batching algorithm would be intended to process, for each notification, a batch of frame. Unfortunately, this is not
+exactly true, because of the following factors:
+\begin{enumerate}
+    \item The TX processing is synchronous, while it would be better doing it in the IOThread.
+    \item The TX processing holds the \texttt{iothread\_lock}, preventing other VCPUs to execute emulation code while the lock is held.
+    \item The TX processing always processes all the TX descriptors it has.
+    \item The moderation timer works with the host time, so it does not stop running down when a VCPU is not executing guest code, but
+	  it is executing emulation code. Therefore a 1-VCPU guest can see a moderation delay which is shorter that expected or even
+	  close to zero.
+\end{enumerate}
+
+For these reasons, even though the UDP sender never stops sending, the sequence of batch lengths oscillates, expecially in the 1-VCPU case.
+In the latter case, the sequence of batch notifications alternates batches of length 1 and very big batches (~200 frames), in a very 
+regular manner. The following batch lengths sequence has been extracted by the emulator while executing with the batching enabled
+\begin{center}
+... 1, 185, 1, 195, 1, 169, 1, 221, 1, 212, 1, 198, 1, 210, 1, 200, 1, 215, 1, 211, 1 ...
+\end{center}
+
+Let's see what happens in more detail. The first time the guest wants to send, the notification is done, \texttt{bat\_pending} is set to 1,
+the TX is emulated an interrupt issued and the moderation timer is armed. When executing the NAPI polling function, there are no 
+pending frames, because the guest has not had time to do anything after the notification, and so \texttt{bat\_pending} is set to 0.
+Here the cycle starts.
+
+Now the guest wants to send another frame, the notification is done, \texttt{bat\_pending} is set to 1, the TX is emulated but no
+interrupt is issued, because the moderation timer is active. Now the guest will continue sending other frames, but this time it will
+find \texttt{bat\_pending} set to 1 for a while, and can therefore insert many new TX frames in the TX ring without doing any notification.
+When the moderation timer expires, an interrupt is issued. When executing the polling function there are a lot of pending frames, and
+so a notification is done in the interrupt routine and \texttt{bat\_pending} is not set to 0. Since there is a lot of TX emulation 
+processing,
+and the moderation timer keep running down, when the processing is finished the timer is very likely to expire, and so an interrupt is
+issued and the timer rearmed. Consequently, when the VCPU enters the guest again (because the processing is done), it has another 
+interrupt\footnote{Here we can see that, from the guest's point of view, the new interrupt has come immediatly after the previous one.} 
+to process with no pending TX frames, and so \texttt{bat\_pending} is set to 0. Here the whole thing starts again.
+
+
+\subsubsection{2-VCPU test}
+The results in the 2-VCPU case is shown in table \ref{tab:e1000-mit-bat-tx-g2h2vcpu}.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 2.770 & KHz\\
+\textbf{TX packet rate} & 145.045 & Kpps\\
+\textbf{TX bitrate} & 105.593 & Mbps\\
+\textbf{TX notifications rate} & 2.769 & KHz\\
+\textbf{MMIO write rate} & 8.312 & KHz\\
+\textbf{MMIO read rate} & 8.370 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Guest to host statistics with 2 VCPU per guest when interrupt moderation is implemented and TDT write batching is enabled.}
+\label{tab:e1000-mit-bat-tx-g2h2vcpu}
+\end{table}
+
+As we can see, the performances are very good, but slightly inferior if compared with the 1-VCPU case.
+As pointed out in the 1-VCPU analysis, when a VCPU is doing the TX emulation, the lock is held, and so the other VCPU cannot do any VMexit,
+limiting the system parallelism, because that VCPU would be blocked on the lock. However, it's not necessary to do a VMExit in order to 
+insert a new TX frame in the ring when \texttt{bat\_pending} is 1, and so the second VCPU can actually have the time to insert more
+frames. For these reasons the sequence of batch lengths has an evolution which is different from the 1-VCPU case, but there is still  a 
+regular oscillation. The following sequence has been exctracted while running the emulator:
+\begin{center}
+... 67, 15, 87, 17, 77, 16, 86, 16, 85, 16, 87, 16, 69, 16, 87, 16, 87, 16, 87, 16 ...
+\end{center}
+We can also observe the interrupt rate is higher w.r.t. the 1-VCPU case. The higher interrupt rate can be explained because the batches
+are shorter. Shorter batches means that the \texttt{start\_xmit} is shorter on average, and so the QEMU event-loop is more responsive,
+having more chances to issue an interrupt, either in timer callback or at the end of the \texttt{start\_xmit} itself. Therefore an
+interrupt is less likely to be delayed more than the moderation delay because of a long TX processing.
+To close the cycle, since interrupt rate is higher, the guest has less time to replenish the TX ring, and so the batches are shorter.
+
+\vspace{0.5cm}
+
+In other words, with 2 VCPUs the TX path converges towards a different trend, which is incidentally less efficient. This is an anomaly,
+since with more VCPUs, and so with more computational power, we have less performance.
+
+
+
+\subsection{Batching without interrupt moderation}
+Even though the batching patch works well when the moderation is implemented, it's interesting to do some test when the moderation is off.
+
+\vspace{0.5cm}
+
+With 1-VCPU guests the patch is completely useless and harmless, because the TX interrupt is never delayed, and the whole TX path is
+synchronous with the VCPU itself. In more detail, the first TX notification is performed because \texttt{bat\_pending} is 0 and so
+\texttt{bat\_pending} is set to 1. Then the VCPU executes the TX emulation and raises an interrupt, reentering the guest. When
+the guest executes the polling function, there are no pending TX frames (because the VCPU had no chances to insert new frames) and so
+\texttt{bat\_pending} is set to 0. The next time the guest wants to send a frame the same thing happens again. So we have a notification
+for each frame to send, e.g. the batching patch is useless.
+
+\vspace{0.5cm}
+
+Wit 2-VCPUs guests the situation is different, because a TX interrupt is issued only at the end of the TX emulation, e.g. when all the
+notified TX descriptors have been processed. So with respect to the other VCPU, the TX interrupt is actually delayed.
+In more detail, the first time the guest wants to send \texttt{bat\_pending} is 0, so the latter is set to 1 and a notification is done.
+While one VCPU is doing the TX emulation or is servicing the TX interrupt, the other VCPU is able to insert more frames in the TX ring,
+so that the next time the notification is done many descriptors are ready to be processed. In this way the batching strategy is able
+to amortize the TX notification overhead over many frames. We have run an experiment with 2-VCPU and obtained the results reported in
+table \ref{tab:e1000-bat-tx-g2h2vcpu}.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 7.820 & KHz\\
+\textbf{TX packet rate} & 95.399 & Kpps\\
+\textbf{TX bitrate} & 69.450 & Mbps\\
+\textbf{TX notifications rate} & 7.820 & KHz\\
+\textbf{MMIO write rate} & 23.462 & KHz\\
+\textbf{MMIO read rate} & 23.518 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Guest to host statistics with 2 VCPU per guest when TDT write batching is enabled but interrupt moderation is not implemented.}
+\label{tab:e1000-bat-tx-g2h2vcpu}
+\end{table}
+
+Here is an extracted sequence of batch lengths
+
+\begin{center}
+... 8, 16, 9, 15, 8, 15, 8, 15, 7, 15, 8, 15, 7, 16, 7, 15, 8, 7, 6, 16, 8, 14, 7, 16, 8 ...
+\end{center}
+
+\vspace{0.5cm}
+
+This result is interesting because the batching patch doesn't require modification to the emulator, but only to the guest device driver.
+Therefore it can be applied to other emulators that don't implement interrupt moderation.
+
+As an example, we tried to run the same test presented in this section under VirtualBox (with KVM), but using two UDP sender a the 2-VCPU
+guest and a receiver on the host. In this situation the total packet rate is about 168 Kpps with the batching enabled, while if
+the batching is disabled the total packet rate is about 60 Kpps. We have not used a single UDP sender because it was not enough to trigger
+the batching mechanism. This is probably due to the different implementation of the e1000 emulation (e.g. a different thread organization).
+
