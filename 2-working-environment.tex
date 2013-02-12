@@ -75,7 +75,7 @@ to the guest OS the PCI device ID of the 82540EM model.}, as well as other netwo
 NE2000 (RTL8029), AMD PCNET II (Am79C7070a)).
 
 In addition to that, QEMU support the \emph{Virtio} framework, that exposes a paravirtualized network device, virtio-net, intended 
-to be used for high performance networking. The Virtio paravirtualized soution will be analized later.
+to be used for high performance networking. The Virtio paravirtualized soution will be analized in chapter \ref{cha:paravirt}
 
 
 
@@ -307,6 +307,7 @@ The e1000 devices have this three features.
 
 
 \subsection{Data interface with the driver}
+\label{sec:e1000-interface}
 Being high performance devices, modern network adapters rely on Direct Memory Access (DMA) operations and interrupts.
 
 When the device driver wants to send an ethernet frame through the adapter, it has to tell the device where the frame is stored
