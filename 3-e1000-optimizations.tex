@@ -1,6 +1,6 @@
 \chapter{Optimizations of emulated e1000 performance}
 \label{cha:e1000-opt}
-In the chapter \ref{chap:env} we have given an overview of the software environment involved in this work.
+In the chapter \ref{chap:env} we have given an overview of the software environment we will deal with in this work.
 In this chapter we will analyze problems and bottlenecks of the current system implementation and propose solutions that are able
 to remove them.
 
@@ -472,7 +472,7 @@ The plot shows that if we increase the MAIR in in the region [2 KHz, $+\infty$],
 less and less restrictive on the Maximum Allowed Interrupt Rate.
 On the other end, if we decrease the MAIR below 1.5 KHz, the throughput starts to decrease, because the RX ring gets full and the guest
 is not notified in a timely manner.
-Moreover, we cannot choose the MAIR to be too low because of the latency (see section \ref{sec:e100-mit-tx});
+Moreover, we cannot choose the MAIR to be too low because of the latency (see section \ref{sec:e1000-mit-tx});
 
 \begin{figure}[bt]
 \centering
