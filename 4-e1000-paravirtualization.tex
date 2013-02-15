@@ -139,6 +139,12 @@ there is no guarantee that the callback will not still be called right after, si
 just an optimization to reduce unnecessary notifications.
 The callback function can call the \texttt{get\_buf} so that it can process the used buffers.
 
+\vspace{0.5cm}
+
+In a similar way, the hypervisor can enable/disable guest notifications (kicks) \footnote{e.g. In our working environment this are
+implemented as guest MMIO accesses.}, since also this notifications are very expensive. When guest notifications are disabled,
+the \texttt{kick} method has no effect.
+
 
 \subsection{The virtio ring transport mechanism}
 In the current implementation, the virtual queues are implemented as \emph{rings}, similarly to what happens with network adapters (see
@@ -176,7 +182,7 @@ The data structures are depicted in figure \ref{fig:vring}.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.48]{vring.pdf}
-\caption{Virtio ring structures. On the top the descriptor array is depicted as a table. On the bottom the \emph{avail} ring and the 
+\caption{Virtio ring data structures. On the top the descriptor array is depicted as a table. On the bottom the \emph{avail} ring and the 
 	 \emph{used} ring.}
 \label{fig:vring}
 \end{figure}
@@ -193,9 +199,35 @@ chain in the used ring, increments the used index and, if is the case, notifies 
 to get an used buffer, it invokes the \texttt{get\_buf} method so that it can clean or complete to process the returned buffer.
 
 
-\subsubsection{The VIRTIO\_RING\_F\_EVENT\_IDX feature}
-boch
+%\subsubsection{The VIRTIO\_RING\_F\_EVENT\_IDX feature}
 
 
-\subsection{Virtio configuration}
-Configurami
+\subsection{Minimizing notifications using Virtio}
+Let's see how we can build an Virtio driver that tries to minimize the notification rate, in both directions.
+As we've seen so far, in our working environment notifications are very expensive, and so minimizing them leads to big performance
+improvements. Since Virtio is explicitely designed to work in a virtualized environment, it's easy to write a driver that minimizes
+notifications.
+We will make an abstract example, where the virtio driver uses a single virtual queue and receives requests from the kernel and passes
+these requests (represented as virtio buffers) to the hypervisor. The hypervisor processes these requests in another thread and returns 
+the used buffers to the virtio driver. When the guest is notified by the hypervisor, the virtual queue callback is invoked: the virtio 
+driver gets the used buffers and do some post processing.
+
+\vspace{0.5cm}
+
+The pseudocode for the virtio driver and the corresponding device emulation into the hypervisor is reported in figure
+\ref{fig:virtiocode}. This pseudocode skip many details, but contains all the interesting strategies to minimize notifications.
+The request processing in the hypervisor is done in the IOThread, using a QEMUBH (section \ref{sec:qemuel}). The QEMUBH is scheduled
+in the \texttt{notification\_callback} function, which is executed by a VCPU thread after a VMExit due to a guest notification.
+As we have already seen, the guest can notify the hypervisor using the \texttt{kick} method, which turns into a real notification
+(e.g. a VMExit) only if the hypervisor has the notifications enabled.
+The postprocessing is done in NAPI...
+
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 1.0]{virtiocode.pdf}
+\caption{Communication scenario in which and UDP sender is on a VM and an UDP receiver is on the host or on another VM.}
+\label{fig:code}
+\end{figure}
+
+
