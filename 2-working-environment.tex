@@ -243,15 +243,23 @@ The network backend can be
 
 Frontend and backend can be seen as two peers connected to each other that are able to exchange ethernet frames. Each peer exports a 
 \texttt{receive} method that accepts an ethernet frame as argument\footnote{The ethernet frame frame can be specified with an address 
-and a length, or with a scatter-gather array.}. That method will be invoked whenever the other peer wants to send a frame.
+and a length, or with a scatter-gather array.}. That method will be invoked by the QEMU network core when the other peer wants to 
+send a frame. Moreover each peer can optionally export a \texttt{can\_receive} method that is called right before the \texttt{receive} 
+method, to make sure that the peer is willing to receive a frame (e.g. it has enough space). If \texttt{can\_receive} 
+returns 0, the corresponding \texttt{receive} method is not called and the packet sent is appended to an internal queue. If 
+\texttt{can\_receive} returns 1, the \texttt{receive} method is invoked. A peer can receive all the packets queued into its internal
+queue by calling \texttt{qemu\_flush\_queued\_packets()}.
+If a \texttt{can\_receive} method is not defined, however, the \texttt{receive} method is always called.
+
+
+\vspace{0.5cm}
 
 In this way, when a frontend wants to send a frame to the network, it invokes the \texttt{qemu\_send\_packet} function provided by the QEMU
 networking API, that will invoke the \texttt{receive} method exported by the backend. The backend \texttt{receive} method will push the
 frame onto the network, in a way that is specific to the backend itself.
-
-On the other direction, when the backend gets a frame from the network, it invokes the \texttt{qemu\_send\_packet} function, that will in turn
-invoke the \texttt{receive} method exported by the frontend. This method will push the frame into the guest system in a way that is
-specific to the network device model.
+On the other direction, when the backend gets a frame from the network, it invokes the \texttt{qemu\_send\_packet} function, that will in 
+turn invoke the \texttt{receive} method exported by the frontend. This method will push the frame into the guest system in a way that is
+specific to the network device model. To be more precise, there
 
 The frontend-backend communication is depicted in figure \ref{fig:frontback}.
 

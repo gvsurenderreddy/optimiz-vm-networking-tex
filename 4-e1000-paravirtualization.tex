@@ -2,13 +2,17 @@
 \label{cha:paravirt}
 In chapter \ref{cha:e1000-opt} we have proposed two simple patches that boost the e1000 performances.
 The moderation patch involves only modification to the hypervisor, while the batching patch involves only modification to the
-guest device driver. These patches can be applied independently on each other, even if the batching generally works better if
+guest device driver. These patches can be applied independently on each other, although batching generally works better if
 it comes together with moderation.
 
-Neverthless, in both cases the we have respected the original e1000 specification, so that the guest can use the e1000 adapter with its
-original (or patched) driver and be unaware that it is actually in a Virtual Machine environment, and that the e1000 adapter is
-emulated. This unawareness is the essence of the \emph{full virtualization} concept: The guest doesn't know to be emulated, so
-that we can run an unmodified OS on top of it and everything works fine.
+\vspace{0.5cm}
+
+Neverthless, in both cases the we have respected the original e1000 interface specification. In this way the guest can use the e1000 adapter
+with its original (or patched) driver and be unaware that it is actually in a Virtual Machine environment, and that the e1000 adapter is
+emulated.  This unawareness is the essence of the \emph{full virtualization} concept: The guest doesn't know to be emulated, so
+that we can run an unmodified OS on top of the VM and everything works fine.
+Also we can use the patched driver with a real e1000 device, or we can use the patched hypervisor with a different e1000 
+driver (e.g. a Windows e1000 driver). Whatever combination we make, it will work fine, because we have always respected the e1000 interface.
 
 \vspace{0.5cm}
 
@@ -20,7 +24,7 @@ and/or to get better performances.
 \section{Device paravirtualization}
 In this thesis we are interested in device paravirtualization, and in particular in network device paravirtualization.
 With this kind of paravirtualization, only the \emph{paravirtualized} device driver is aware of the virtualization, while the rest of the
-system is not.
+guest system is not.
 We can obtain a paravirtualized driver either by modifying an existing real driver, or by creating a new \emph{fake} driver. In the
 latter case the driver correspond to a new virtual (fake) device that does not really exist, but is just a stub used to communicate with 
 the outside world exporting to the guest OS the same interface exported by a real driver, so that the guest OS
@@ -59,11 +63,11 @@ shared memory. A real device driver doesn't worry so much about accessing regist
 
 
 \section{The Virtio standard}
-Virtio is a virtualization standard that aims at high I/O performances through device paravirtualization. This is done creating completely
-new device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
+Virtio is a virtualization standard that aims at high I/O performances through device paravirtualization. This is done creating a completely
+new set of device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
 similar to the Xen I/O paravirtualization and the VMware \emph{Guest Tools}.
 Virtio is an effort to estabilish a standard interface between drivers and hypervisors for paravirtualized I/O, in order to increase the 
-code reuse across platform. In this way we avoid to have an independent I/O paravirtualization solution for each hypervisor.
+code reuse across platform. In this way we avoid having an independent I/O paravirtualization solution for each hypervisor.
 The Virtio standard defines different I/O (fake) devices, including a network adapter, a SCSI disk and a serial interface, and is currently
 supported by QEMU and Virtualbox. Linux and Windows drivers are available for Virtio devices.
 
@@ -74,8 +78,9 @@ supported by QEMU and Virtualbox. Linux and Windows drivers are available for Vi
 \label{fig:virtio}
 \end{figure}
 
-As we can see from figure \ref{fig:virtio}, the Virtio interface is implemented through a virtio frontend in the guest OS, and a virtio
-backend in the hypervisor. All the virtio device drivers can share the virtio frontend code. The task of a virtio driver is therefore to
+As we can see from figure \ref{fig:virtio}, the Virtio interface is implemented through a \emph{virtio frontend} in the guest OS, and a 
+\emph{virtio backend} in the hypervisor.
+All the virtio device drivers can share the virtio frontend code. The task of a virtio driver is therefore to
 convert the OS representation of the data to exchange (e.g. a network packet) into the standard virtio data format, or the other way
 around. All the virtio device emulators (e.g. the QEMU frontend for each virtio device) can share the virtio backend code. The task
 of a virtio device emulator is therefore to convert the virtio representation of the data to exchange into the hypervisor specific
@@ -85,8 +90,13 @@ communicate through the virtio infrastructure using an efficient and general mec
 \vspace{0.5cm}
 
 The organization illustrated in figure \ref{fig:virtio} is actually similar to the one used for real device emulation (e.g. e1000 standard).
-However the Virtio interface is explicitely designed for efficient communication between driver and hypervisor, while this is not true for
-real device hardware/software interfaces.
+However the Virtio interface is explicitely designed for efficient communication between driver and hypervisor,
+while this is not true for real device hardware/software interfaces.
+
+\vspace{0.5cm}
+
+In order to estabilish an efficient communication channel, the Virtio interface implementation uses MMIO accesses and interrupts only
+to notify the other peer, and never to exchange data information. Whatever data exchange is done through shared memory.
 
 
 \subsection{Virtual queues}
@@ -600,4 +610,272 @@ there is not enough parallelism in the guest to exploit.
 \end{center}
 \caption{Host to guest statistics with 2 VCPU per guest}
 \label{tab:virtionet-rx-g2hvcpu}
+\end{table}
+
+
+
+\section{Porting paravirtualization to e1000}
+In the previous sections we've seen how is possible to get good performances using a paravirtualized I/O solution. Virtio drivers are
+efficient because the only make use MMIO accesses and interrupts to notify the other peer of a virtual queue, and exchange data and
+metadata through shared memory.
+However, the Virtio interface must also be general enough to support different kind of devices and is not specifically tailored to the
+network device world: Most of the complications comes from the need of device driver support. As an example, a network driver don't need
+two rings (avail and used) for each virtual queue, and don't even need to separate the ring from the descriptor table. The descriptor
+table and two indices in that table would have been enough.
+Moreover, a complete mitigation scheme is not implemented, and this is a limitation in same situations (see section
+\ref{sec:virtionet-perf-rx}),
+Lastly, the Virtio solution requires a completely new set of device drivers/emulators, which is a greater effort than modifying
+an existing device driver/emulator.
+
+\vspace{0.5cm}
+
+In this section we will see how is possible to extend the e1000 interface in order to adopt the paravirtualization paradigm.
+As usual, we will try to minimize the modifications to the existing code, so that the proposed patch can be easy to test and mantain.
+
+
+\subsection{Asynchronous TX Processing}
+\label{sec:e1000-par-async}
+In the e1000 emulation we've seen so far, the TX processing is done by a VCPU thread (section \ref{sec:e1000txemu}).
+A better solution however, is to employ the processing/notification scheme presented in section \ref{sec:virtiomin} (e.g. NAPI-like 
+mitigation), in which the hypervisor processing (in this case TX processing) is done asynchronously using a QEMUBH.
+In this way the TX processing is executed by the IOThread in parallel to the VCPUs.
+
+
+\subsection{Communication Status Block}
+In order to implement an efficient communication scheme we have to remove, where possible, MMIO accesses that exchange data, leaving only
+accesses that implement geust notifications to the hypervisor.
+Writes to TDT and RDT registers are used for two functions:
+\begin{enumerate}
+  \item (notify) Notify the hypervisor that there is something new to process (new TX descriptors to process or new Rx descriptors to use).
+  \item (status) Tell the hypervisor which descriptors have just been added.
+\end{enumerate}
+A notification (1), however, is not always necessary\footnote{For example, it's not necessary if the other peer is in its working cycle}, 
+while status information exchange (2) is always desirable, so that the other peer is always updated and it's less likely to exit from its
+working cycle.
+It would then be better to split these functions: TDT/RDT writes are used only for notifications, while status exchange can be done using
+shared memory. For these reasons a dedicate block of shared memory, called \emph{Communication Status Block} (CSB), has been allocated
+in the guest memory. The CSB is a set of 32-bits words that are used to exchange information about the status of the communication without
+VMExits.
+
+\vspace{0.5cm}
+
+The CSB contains the following words:
+\begin{itemize}
+  \item TXSNTS (Tx Software Next To Send): is synchronized with the \texttt{tx\_next\_to\_use} variable (when in a coherent state). In 
+	short, where the \texttt{ndo\_start\_xmit} starts to insert new TX descriptors in the TX ring. It is used to replace the status
+	information exchange of the TDT register.
+	
+  \item TXHNTS (Tx Hardware Next To Send): is synchronized with the TDH register. In short, where the hardware takes the next TX descriptor
+	to process.
+	
+  \item TXSNTC (Tx Software Next To Clean): is synchronized with the \texttt{tx\_next\_to\_clean} variable. In short, where the TX interrupt
+	routine takes the next used TX descriptor to clean.
+	
+  \item RXSNTP (Rx Software Next To Prepare): is synchronized with the \texttt{rx\_next\_to\_use} variable. In short, where the driver
+	adds new RX descriptor to use for reiceving new frames.
+	
+  \item RXHNTR (Rx Hardware Next To Receive): is synchronized with the RDH register. In short, where the hardware takes the next RX
+	descriptor to use for an incoming frame.
+	
+  \item RXSNTR (Rx Software Next To Receive): is synchronized with the \texttt{rx\_next\_to\_clean} variable. In short, where the RX 
+	interrupt routine takes the next used RX descriptor to push the received frame to the network stack.
+	
+  \item TXNTFY (Tx Notify Flag): Set/Cleared by the hardware to enable/disable TX notifications. At the end of the
+	\texttt{ndo\_start\_xmit} method, the driver always updates TXSNTS, and updates also TDT only if TXNTFY is set.
+	
+  \item RXNTFY (Rx Notify Flag): Set/Cleared by the hardware to enable/disable RX notifications. After adding new RX
+	descriptors in the ring, the driver always updates RXSNTP, and updates also RDT only if RXNTFY is set.
+\end{itemize}
+
+Some words (TXSNTS, TXSNTC, RXSNTP and RXSNTR) are always written by the software (the driver) and read by the hardware (the device 
+emulator).
+The other words (TXHNTS, RXHNTR, TXNTFY and RXNTFY) are always written by the hardware and read by the software.
+
+\vspace{0.5cm}
+
+How we can see, these variables capture in each moment the status of the communication (both RX and TX). Most of them are just shadow
+copies of registers (TXHNTS and RXHNTR) or shadow copies of existing driver variables (TXSNTS, TXSNTC, RXSNTP and RXSNTR), therefore
+nothing new so far. Shadow copies of registers are useful because the driver can read them without a VMExit. Shadow copies of existing
+variables are useful only for technical reasons: they allow us to have all the interesting variables in a contiguous chunk of physical 
+memory so that the driver only has to tell the hardware the CSB physical address. Otherwise the driver should tell the hardware a different
+physical address for each interesting variable\footnote{In the current implementation the memory for these variables is not allocated all
+together, so the driver data memory is not necessarily contiguous.}
+
+\vspace{0.5cm}
+
+On the other end, TXNTFY and RXNTFY are something new. These are used by the hardware to disable TDT writes and RDT writes when
+these are not necessary anymore. As we have outlined in section \ref{sec:e1000-par-async}, the idea is to implement the usual
+producer/consumer scheme (NAPI-like mitigation), which requires a method for the consumer to disable producer mitigations.
+
+\vspace{0.5cm}
+
+Similarly to what happens to the other shared memory structures (e.g. TX/RX rings), the hardware must be told how the CSB has been allocated
+in the guest physical memory. For these reason, two 32-bit registers, CSBBAH (CSB Base Address High) and CSBBAL (CSB Base Address Low)
+have been added to the register set. The driver must write the physical address of the CSB to these registers.
+
+
+\subsection{Implementation}
+This and the section briefly reports what changes have been added to the RX and the TX path to implement e1000 paravirtualization.
+The changes are relative to the existing implementation of e1000, possibly improved with the moderation patch.
+As we have already observed, interrupt moderation is very useful within PCCs in which the hypervisor is the producer, when the consumer
+is faster than the consumer. However, the paravirtualization patch is independent on the moderation patch.
+The driver batching mechanism, on the other hand, is not intended to be used jointly with paravirtualization, simply because this would not
+make any sense: Since paravirtualization export the status of the communication, there's no need to flush pending TX descriptors, we just
+have to notify the hypervisor when necessary.
+
+\vspace{0.5cm}
+
+A new parameter, \texttt{paravirtual}, has been added to the e1000 module. The parameter value can be specified only ad module loading time
+and cannot be changed dynamically. When \texttt{paravirtual} is 0, the driver is the original one, and the device emulator (e1000 frontend)
+behaves as usual\footnote{To keep the code simple, the CSB is always allocated even if \texttt{paravirtual} is 0.}. When 
+\texttt{paravirtual} is 1, the driver allocates the CSB, initializes it, and writes its physical address to the CSBBAH and CSBBAL registers.
+On the hypervisor side, the emulated e1000 hardware switches to ``paravirtual mode'' when the driver writes to the CSBBAL register and
+CSBBAL/CSBBAH registers specify together a non-null address.
+
+\vspace{0.5cm}
+
+At initialization time, the CSB words are set to 0, except for TXNTFY and RXNTFY that are initialized to 1.
+
+
+\subsubsection{Changes in the TX path}
+At the end of the \texttt{ndo\_start\_xmit} method in the e1000 original driver, where the TDT would be updated, we changed the
+code so that TXSNTS is updated, while the TDT is updated only if TXNTFY is set.
+In the TDT write handler, TXNTFY is cleared to disable further notifications and the QEMUBH is scheduled. The QEMUBH handler invokes the
+\texttt{start\_xmit} function, so that the TX processing (working) cycle is entered. The working cycle can exit because we processed
+too many descriptors (256 in the current implementation) or because there is no more work to do. If the working cycle has processed at least
+one descriptor, the QEMUBH is rescheduled. Otherwise TXNTFY is set to 1, and the usual double check is performed. If new work is found,
+TXNTFY is cleared and the QEMUBH rescheduled. If new work hasn't come yet we don't reschedule the QEMUBH.
+Note that we reschedule even if just one descriptor has been processed, and not only if a full burst (256) of descriptors has been processed:
+This is a form of \emph{spinning} that can be useful when dealing with fast backends, because we make the QEMUBH more likely to be
+rescheduled, and so the TX notification more likely to be disabled. The spinning can work well in this case because the QEMUBH handler is
+not executed immediately, but in the next event-loop iteration, so that the guest has some time to post more work in the queue.
+
+
+\subsubsection{Changes in the RX path}
+At the end of \texttt{e1000\_alloc\_rx\_buffers} in the original driver, where the RDT would be updated, we changed the code so that
+RXSNTP is updated, but RDT is updated only if RXNTFY is set.
+In the RDT write handler, if the RDT write actually gives some new receive buffers, RXNTFY is cleared to disable further RX notifications.
+Remember that is the last case \texttt{qemu\_flush\_queued\_packets()} is called (see section \ref{sec:frontback}). 
+When the hardware runs out of receive buffers, the e1000 \texttt{can\_receive} method returns 0. Before returning, however, it has to
+set RXNTFY, so that when new receive buffers are put in the RX ring, a RDT write can flush the queued packets (if any).
+After notifications have been enabled, as usual, a double check is performed in order to avoid race conditions.
+
+
+\subsubsection{Other changes}
+Since we know to be in a virtual machine environment, some more optimizations can be done.
+In particular, after writing to IMS and IMC registers (see section \ref{sec:e1000-tx-g2h1vcpu}), we can avoid reading the STATUS register
+to flush the previous register write, since there's no need to do so on the emulated hardware.
+
+
+\subsection{Improvement analysis}
+In this section we will perform the usual experiments (see section \ref{sec:e1000perf}), so that we can evaluate the performance
+improvements. The e1000 module has been loaded with the following parameters:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value}\\
+\midrule
+TxIntDelay & 0\\
+TxAbsIntDelay & 0\\
+InterruptThrottleRate & 4000\\
+batching & 0\\
+paravirtual & 1\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+\subsubsection{TX performance}
+The results for 1-VCPU case are shown in table \ref{tab:e1000-par-tx-g2h1vcpu}.
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 0.370 & KHz\\
+\textbf{TX packet rate} & 183.447 & Kpps\\
+\textbf{TX bitrate} & 135.136 & Mbps\\
+\textbf{TX notifications rate} & 0.438 & KHz\\
+\textbf{MMIO write rate} & 1.181 & KHz\\
+\textbf{MMIO read rate} & 0.430 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Guest to host statistics with 1 VCPU per guest with paravirtualized e1000 and interrupt moderation.}
+\label{tab:e1000-par-tx-g2h1vcpu}
+\end{table}
+
+As we can see, performances are better with reference to the previous tests (both e1000 and Virtio). The interrupt rate is very low,
+thanks to mitigation and NAPI. The TX notification are minimized because of the usual NAPI-like scheme.
+Note that the total MMIO access rate is 1.611, which is about 4.35 times the interrupt rate: 3 MMIO accesses per interrupt are due
+to the ICR read and IMC and IMS write, while 1.35 access per iterrupt are due to the TX notifications.
+
+\vspace{0.5cm}
+
+The results for the 2-VCPU test case (shown in table \ref{tab:e1000-par-tx-g2h2vcpu}) are very similar.
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 0.581 & KHz\\
+\textbf{TX packet rate} & 182.899 & Kpps\\
+\textbf{TX bitrate} & 133.150 & Mbps\\
+\textbf{TX notifications rate} & 0.344 & KHz\\
+\textbf{MMIO write rate} & 1.438 & KHz\\
+\textbf{MMIO read rate} & 0.547 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Guest to host statistics with 2 VCPU per guest with paravirtualized e1000 and interrupt moderation.}
+\label{tab:e1000-par-tx-g2h2vcpu}
+\end{table}
+
+
+\subsubsection{RX performance}
+In the 1-VCPU case the measured critical rate is about 315 Kpps, which is the best result so far. Table \ref{tab:e1000-par-rx-g2h1vcpu}
+shows the statistics when the VM accepts an incoming rate of about 317 Kpps.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 3.774 & KHz\\
+\textbf{RX packet rate} & 317.335 & Kpps\\
+\textbf{RX bitrate} & 231.020 & Mbps\\
+\textbf{RX notifications} & 0.001 & Mbps\\
+\textbf{MMIO write rate} & 7.546 & KHz\\
+\textbf{MMIO read rate} & 3.772 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Host to guest statistics with 1 VCPU per guest wit paravirtualized e1000 and interrupt moderation}
+\label{tab:e1000-par-rx-g2h1vcpu}
+\end{table}
+
+The very good result is due to the interrupt moderation, the NAPI, the MMIO access optimizations (avoid reading the STATUS register to
+flush the register write) and the RX notification moderation.
+The total MMIO access rate is 11.318 KHz, which means about $\frac{11.318 KHz}{3.774 KHz} \sim 3$ MMIO access per interrupt. These three
+interrupt are the ICR read, and the IMC and IMS writes. RX notifications are essentially absent, because these notifications are enabled
+only when the RX ring has not receive buffers to use, e.g. when the hypervisor start to be faster than the guest on the RX path.
+In our case the incoming rate is still too low to make that situation very likely.
+
+\vspace{0.5cm}
+
+With 2 VPCUs the measured critical rate is also about 315 Kpps. Table \ref{tab:e1000-par-rx-g2h2vcpu}
+shows the statistics when the VM accepts an incoming rate of about 315 Kpps.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Interrupt rate} & 3.678 & KHz\\
+\textbf{RX packet rate} & 315.439 & Kpps\\
+\textbf{RX bitrate} & 229.640 & Mbps\\
+\textbf{RX notifications} & 0.002 & Mbps\\
+\textbf{MMIO write rate} & 7.358 & KHz\\
+\textbf{MMIO read rate} & 3.678 & KHz\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{Host to guest statistics with 2 VCPU per guest wit paravirtualized e1000 and interrupt moderation}
+\label{tab:e1000-par-rx-g2h2vcpu}
 \end{table}
