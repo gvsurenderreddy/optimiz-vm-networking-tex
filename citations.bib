@@ -1,0 +1,553 @@
+%
+% bibliography related to virtualization and netmap
+
+% Ole Agesen Jim Mattson Radu Rugina Jeffrey Sheldon
+% Software Techniques for Avoiding Hardware Virtualization Exits
+% https://www.usenix.org/system/files/conference/atc12/atc12-final158.pdf
+
+@book{ref:vmbook,
+ author = {Smith, James E. and Nair, Ravi},
+ title = {Virtual Machines - Versatile Platforms for systems and processes},
+ issue_date = {2005},
+ year = {2005},
+ isbn = {1-55860-910-5},
+ publisher = {Elsevier},
+ address = {San Francisco, CA, USA},
+ keywords = {Virtual Machine, Dynamic Translation, Virtualization},
+} 
+
+\bibitem{ref:x86-virt}
+Keith Adams, Ole Agesen\\
+A Comparison of Software and Hardware Techniques for x86 Virtualization\\
+ACM, 2006\\
+
+@article{ref:x86-virt,
+ author = {Adams, Keith and Agesen, Ole},
+ title = {A Comparison of Software and Hardware Techniques for x86 Virtualization}
+ journal = {ASPLOS},
+ issue_date = {October 2006},
+ month = October,
+ year = {2006},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/1400097.1400108},
+ doi = {10.1145/1400097.1400108},
+ acmid = {1400108},
+ publisher = {ACM},
+ address = {San Jose, CA, USA},
+ keywords = {Virtualization, Virtual Machine Monitor, Dynamic Binary Translation, x86, VT, SVM, MMU, TLB, Nested Paging},
+} 
+
+@article{ref:vmclassification,
+ author = {Huang, Quian},
+ title = {An Introduction to Virtual Machines Implementation and Applications},
+ journal = {SIGOPS Oper. Syst. Rev.},
+ issue_date = {October 2006},
+ volume = {42},
+ number = {5},
+ month = October,
+ year = {2006},
+ pages = {5--14},
+ url = {http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.186.4512},
+ doi = {10.1.1.186.4512},
+ publisher = {The University of British Columbia},
+} 
+
+
+@article{ref:intel-VT-x,
+ author = {Neiger, Gil Santoni, Amy },
+ title = {Intel Virtualization Technology: Hardware Support for Efficient Processor Virtualization},
+ journal = {Intel Technology Journal},
+ issue_date = {August 2006},
+ volume = {10},
+ number = {3},
+ month = August,
+ year = {2006},
+ issn = {1535-864X},
+ url = {http://noggin.intel.com/content/intel-virtualization-technology-hardware-support-for-efficient-processor-virtualization},
+ doi = {10.1535/itj.1003},
+ address = {Santa Clara, CA, USA},
+ keywords = {virtualization, processor, VT-x, VT-i},
+} 
+
+@manual{ref:amd-v,
+ author = {AMD},
+ title = {Secure Virtual Machine Architecture Reference Manual},
+ issue_date = {May 2005},
+ month = May,
+ year = {2008},
+ revision = {3.01}
+ url = {http://doi.acm.org/10.1145/1400097.1400108},
+ address = {Sunnyvale, CA, USA},
+ keywords = {AMD, virtualization, AMD-v},
+} 
+
+@misc{ref:qemu,
+   title = {{The QEMU project}},
+   howpublished = {http://www.qemu.org}
+}
+
+@article{ref:qemu-paper,
+ author = {Bellard, Fabrice},
+ title = {QEMU, a Fast and Portable Dynamic Translator},
+ issue_date = {February 2005},
+ year = {2005},
+ month = February,
+ url = {http://static.usenix.org/event/usenix05/tech/freenix/full_papers/bellard/bellard_html/},
+ publisher = {USENIX},
+} 
+
+@manual{ref:e1000,
+ author = {Intel Corporation},
+ title = {PCI/PCI-X Family of Gigabit Ethernet Controllers Software Developers Manual},
+ revision = {4.0}
+ issue_date = {March 2009},
+ month = March,
+ year = {2009},
+ url = {http://www.intel.com/content/www/us/en/ethernet-controllers/pci-pci-x-family-gbe-controllers-software-dev-manual.html},
+ publisher = {Intel},
+ address = {Santa Clara, CA, USA},
+}
+
+% russell - virtio
+%-article{Russell:2008:VTD:1400097.1400108,
+@article{ref:virtio,
+ author = {Russell, Rusty},
+ title = {virtio: towards a de-facto standard for virtual I/O devices},
+ journal = {SIGOPS Oper. Syst. Rev.},
+ issue_date = {July 2008},
+ volume = {42},
+ number = {5},
+ month = jul,
+ year = {2008},
+ issn = {0163-5980},
+ pages = {95--103},
+ numpages = {9},
+ url = {http://doi.acm.org/10.1145/1400097.1400108},
+ doi = {10.1145/1400097.1400108},
+ acmid = {1400108},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {I/O, KVM, Linux, lguest, ring buffer, virtio, virtio_pci, virtualization, vring},
+} 
+
+% VPIO virtual passthrough on non virtualized hw
+%-article{Xia:2009:IVP:1618525.1618535,
+@article{ref:vpio,
+ author = {Xia, Lei and Lange, Jack and Dinda, Peter and Bae, Chang},
+ title = {Investigating virtual passthrough I/O on commodity devices},
+ journal = {SIGOPS Oper. Syst. Rev.},
+ issue_date = {July 2009},
+ volume = {43},
+ number = {3},
+ month = jul,
+ year = {2009},
+ issn = {0163-5980},
+ pages = {83--94},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/1618525.1618535},
+ doi = {10.1145/1618525.1618535},
+ acmid = {1618535},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+} 
+
+%-inproceedings{Agesen:2012:STA:2342821.2342856,
+@inproceedings{ref:usenix2012,
+ author = {Agesen, Ole and Mattson, Jim and Rugina, Radu and Sheldon, Jeffrey},
+ title = {Software techniques for avoiding hardware virtualization exits},
+ booktitle = {Proceedings of the 2012 USENIX conference on Annual Technical Conference},
+ series = {USENIX ATC'12},
+ year = {2012},
+ location = {Boston, MA},
+ pages = {35--35},
+ numpages = {1},
+ url = {http://dl.acm.org/citation.cfm?id=2342821.2342856},
+ acmid = {2342856},
+ publisher = {USENIX Association},
+ address = {Berkeley, CA, USA},
+} 
+
+%-article{Agesen:2010:EXV:1899928.1899930,
+@article{ref:agesen2010,
+ author = {Agesen, Ole and Garthwaite, Alex and Sheldon, Jeffrey and Subrahmanyam, Pratap},
+ title = {The evolution of an x86 virtual machine monitor},
+ journal = {SIGOPS Oper. Syst. Rev.},
+ issue_date = {December 2010},
+ volume = {44},
+ number = {4},
+ month = dec,
+ year = {2010},
+ issn = {0163-5980},
+ pages = {3--18},
+ numpages = {16},
+ url = {http://doi.acm.org/10.1145/1899928.1899930},
+ doi = {10.1145/1899928.1899930},
+ acmid = {1899930},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {MMU, SVM, TLB, VT, dynamic binary translation, nested paging, vSMP, virtual machine monitor, virtualization, x86},
+} 
+
+%ref:agesen2006,
+%O. Agesen. Binary translation of returns. In Workshop on Binary Instrumentation and Applications, pages 7--14, October 2006
+%
+
+% Ole Agesen, Alex Garthwaite, Jeffrey Sheldon, Pratap Subrahmanyam
+% The Evolution of an x86 Virtual Machine Monitor
+% http://web.mit.edu/6.033/www/papers/agesen.pdf
+
+%-inproceedings{Xia:2012:VBC:2287076.2287116,
+@inproceedings{ref:vnetp,
+ author = {Xia, Lei and Cui, Zheng and Lange, John R. and Tang, Yuan and Dinda, Peter A. and Bridges, Patrick G.},
+ title = {VNET/P: bridging the cloud and high performance computing through fast overlay networking},
+ booktitle = {Proceedings of the 21st international symposium on High-Performance Parallel and Distributed Computing},
+ series = {HPDC '12},
+ year = {2012},
+ isbn = {978-1-4503-0805-2},
+ location = {Delft, The Netherlands},
+ pages = {259--270},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/2287076.2287116},
+ doi = {10.1145/2287076.2287116},
+ acmid = {2287116},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {hpc, overlay networks, scalability, virtualization},
+} 
+
+%-inproceedings{Rizzo:2012:VSE:2413176.2413185,
+@inproceedings{ref:vale,
+ author = {Rizzo, Luigi and Lettieri, Giuseppe},
+ title = {VALE, a switched ethernet for virtual machines},
+ booktitle = {Proceedings of the 8th international conference on Emerging networking experiments and technologies},
+ series = {CoNEXT '12},
+ year = {2012},
+ isbn = {978-1-4503-1775-7},
+ location = {Nice, France},
+ pages = {61--72},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/2413176.2413185},
+ doi = {10.1145/2413176.2413185},
+ acmid = {2413185},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {netmap, software switches, virtual machines},
+} 
+
+%-inproceedings{Wang:2008:XTH:1383422.1383437,
+@inproceedings{ref:xenloop,
+ author = {Wang, Jian and Wright, Kwame-Lante and Gopalan, Kartik},
+ title = {XenLoop: a transparent high performance inter-vm network loopback},
+ booktitle = {Proceedings of the 17th international symposium on High performance distributed computing},
+ series = {HPDC '08},
+ year = {2008},
+ isbn = {978-1-59593-997-5},
+ location = {Boston, MA, USA},
+ pages = {109--118},
+ numpages = {10},
+ url = {http://doi.acm.org/10.1145/1383422.1383437},
+ doi = {10.1145/1383422.1383437},
+ acmid = {1383437},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {inter-vm communication, virtual machine, xen},
+} 
+
+%-article{10.1109/TPDS.2012.339,
+@article{ref:vrss,
+author = {HaiBing Guan and YaoZu Dong and RuHui ma and Dongxiao Xu and Yang Zhang and Jian Li},
+title = {Performance Enhancement for Network I/O Virtualization with Efficient Interrupt Coalescing and Virtual Receive Side Scaling},
+journal ={IEEE Transactions on Parallel and Distributed Systems},
+volume = {99},
+number = {PrePrints},
+issn = {1045-9219},
+year = {2013},
+pages = {1},
+doi = {http://doi.ieeecomputersociety.org/10.1109/TPDS.2012.339},
+publisher = {IEEE Computer Society},
+address = {Los Alamitos, CA, USA},
+}
+
+% -article{Gordon:2012:EBP:2189750.2151020
+@article{ref:eli,
+ author = {Gordon, Abel and Amit, Nadav and Har'El, Nadav and Ben-Yehuda, Muli and Landau, Alex and Schuster, Assaf and Tsafrir, Dan},
+ title = {ELI: bare-metal performance for I/O virtualization},
+ journal = {SIGARCH Comput. Archit. News},
+ issue_date = {March 2012},
+ volume = {40},
+ number = {1},
+ month = mar,
+ year = {2012},
+ issn = {0163-5964},
+ pages = {411--422},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/2189750.2151020},
+ doi = {10.1145/2189750.2151020},
+ acmid = {2151020},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {I/O performance, I/O virtualization, SR-IOV, device assignment, interrupts}
+} 
+
+%-inproceedings{Sugerman:2001:VID:647055.715774,
+% http://www.vmware.com/pdf/usenix_io_devices.pdf
+@inproceedings{ref:vmware2001,
+ author = {Sugerman, Jeremy and Venkitachalam, Ganesh and Lim, Beng-Hong},
+ title = {Virtualizing I/O Devices on VMware Workstation's Hosted Virtual Machine Monitor},
+ booktitle = {Proceedings of the General Track: 2002 USENIX Annual Technical Conference},
+ year = {2001},
+ isbn = {1-880446-09-X},
+ pages = {1--14},
+ numpages = {14},
+ url = {http://dl.acm.org/citation.cfm?id=647055.715774},
+ acmid = {715774},
+ publisher = {USENIX Association},
+ address = {Berkeley, CA, USA}
+} 
+
+% inproceedings{Kim:2012:FIF:2401603.2401690,
+@inproceedings{ref:iofairness,
+ author = {Kim, Sewoog and Kang, Dongwoo and Choi, Jongmoo},
+ title = {Fine-grained I/O fairness analysis in virtualized environments},
+ booktitle = {Proceedings of the 2012 ACM Research in Applied Computation Symposium},
+ series = {RACS '12},
+ year = {2012},
+ isbn = {978-1-4503-1492-3},
+ location = {San Antonio, Texas},
+ pages = {403--408},
+ numpages = {6},
+ url = {http://doi.acm.org/10.1145/2401603.2401690},
+ doi = {10.1145/2401603.2401690},
+ acmid = {2401690},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {I/O fairness, fine-grained analysis, multidimensional, multimodal, virtualization},
+} 
+
+%- inproceedings{Gordon:2012:TEE:2367589.2367593,
+@inproceedings{ref:exitless,
+ author = {Gordon, Abel and Har'El, Nadav and Landau, Alex and Ben-Yehuda, Muli and Traeger, Avishay},
+ title = {Towards exitless and efficient paravirtual I/O},
+ booktitle = {Proceedings of the 5th Annual International Systems and Storage Conference},
+ series = {SYSTOR '12},
+ year = {2012},
+ isbn = {978-1-4503-1448-0},
+ location = {Haifa, Israel},
+ pages = {4:1--4:6},
+ articleno = {4},
+ numpages = {6},
+ url = {http://doi.acm.org/10.1145/2367589.2367593},
+ doi = {10.1145/2367589.2367593},
+ acmid = {2367593},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+} 
+
+%-article{Rosenblum:2011:IV:2063166.2071256,
+@article{ref:rosemblum,
+ author = {Rosenblum, Mendel and Waldspurger, Carl},
+ title = {I/O Virtualization},
+ journal = {Queue},
+ issue_date = {November 2011},
+ volume = {9},
+ number = {11},
+ month = nov,
+ year = {2011},
+ issn = {1542-7730},
+ pages = {30:30--30:39},
+ articleno = {30},
+ numpages = {10},
+ url = {http://doi.acm.org/10.1145/2063166.2071256},
+ doi = {10.1145/2063166.2071256},
+ acmid = {2071256},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+}
+
+%-article{Bugnion:2012:BVX:2382553.2382554,
+@article{ref:rosemblum-tocs,
+ author = {Bugnion, Edouard and Devine, Scott and Rosenblum, Mendel and Sugerman, Jeremy and Wang, Edward Y.},
+ title = {Bringing Virtualization to the x86 Architecture with the Original VMware Workstation},
+ journal = {ACM Trans. Comput. Syst.},
+ issue_date = {November 2012},
+ volume = {30},
+ number = {4},
+ month = nov,
+ year = {2012},
+ issn = {0734-2071},
+ pages = {12:1--12:51},
+ articleno = {12},
+ numpages = {51},
+ url = {http://doi.acm.org/10.1145/2382553.2382554},
+ doi = {10.1145/2382553.2382554},
+ acmid = {2382554},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {VMM, Virtualization, dynamic binary translation, hypervisors, virtual machine monitors, x86},
+} 
+
+% INPROCEEDINGS{6289293, 
+@inproceedings{ref:crowley,
+author={Schultz, M.J. and Crowley, P.}, 
+booktitle={Computer Communications and Networks (ICCCN), 2012 21st International Conference on}, title={Performance Analysis of Packet Capture Methods in a 10 Gbps Virtualized Environment}, 
+year={2012}, 
+month={30 2012-aug. 2}, 
+volume={}, 
+number={}, 
+pages={1 -8}, 
+keywords={Hardware;Kernel;Monitoring;Throughput;Virtual machining;computer network performance evaluation;multiprocessing systems;bare metal system;multicore system;multiple cores;network speed;packet capture method;packet processing application;performance analysis;processor clock rates stagnate;processor core counts;traffic rates;virtual appliance model;virtual system;virtualized environment;}, 
+doi={10.1109/ICCCN.2012.6289293}, 
+ISSN={},}
+
+%-------------------------------------------------------------
+@inproceedings{ref:lowlatency,
+   title={It's Time for Low Latency},
+   author={Rumble, S.M. and Ongaro, D. and Stutsman, R. and Rosenblum, M. and K. Ousterhout, J.}
+   year={2011},
+   booktitle={HotOS XIII, 13th Workshop on Hot Topics in Operating Systems},
+   organization={ACM}
+}
+
+@article{ref:packetshader,
+  title={PacketShader: a GPU-accelerated software router},
+  author={Han, S. and Jang, K. and Park, K.S. and Moon, S.},
+  journal={ACM SIGCOMM Computer Communication Review},
+  volume={40},
+  number={4},
+  pages={195--206},
+  year={2010},
+  publisher={ACM}
+}
+
+@inproceedings{ref:routebricks,
+  title={RouteBricks: Exploiting parallelism to scale software routers},
+  author={Dobrescu, M. and Egi, N. and Argyraki, K. and Chun, B.G. and Fall, K. and Iannaccone, G. and Knies, A. and Manesh, M. and Ratnasamy, S.},
+  booktitle={ACM SOSP},
+  pages={15--28},
+  year={2009}
+}
+
+@article{ref:click,
+  title={The Click modular router},
+  author={Kohler, E. and Morris, R. and Chen, B. and Jannotti, J. and Kaashoek, M.F.},
+  journal={ACM Transactions on Computer Systems (TOCS)},
+  volume={18},
+  number={3},
+  pages={263--297},
+  year={2000},
+  publisher={ACM}
+}
+
+@inproceedings{ref:deri2005ncap,
+  title={nCap: Wire-speed packet capture and transmission},
+  author={Deri, L.},
+  booktitle={Workshop on End-to-End Monitoring Techniques and Services},
+  pages={47--55},
+  year={2005},
+  organization={IEEE}
+}
+
+@article{ref:netmap-home,
+  title={Netmap home page},
+  author={Luigi Rizzo},
+  journal={Universit\`a di Pisa, http://info.iet.unipi.it/$\sim$luigi/netmap/},
+}
+
+@article{ref:rizzo-infocom12,
+  title={Transparent acceleration of software packet forwarding using netmap},
+  author={Rizzo, Luigi and Carbone, Marta and Catalli, Gaetano},
+  publisher={Univ. di Pisa, Tech. report 2011},
+  journal={INFOCOM'12, Orlando, FL, March 2012, http://info.iet.unipi.it/$\sim$luigi/netmap/}
+}
+
+
+@article{ref:mogul,
+  title={Eliminating receive livelock in an interrupt-driven kernel},
+  author={Mogul, J.C. and Ramakrishnan, K.K.},
+  journal={ACM Transactions on Computer Systems (TOCS)},
+  volume={15},
+  number={3},
+  pages={217--252},
+  year={1997},
+  publisher={ACM}
+}
+
+@article{ref:rizzo-polling,
+  title={Polling versus Interrupts in network device drivers},
+  author={Rizzo, Luigi},
+  journal={BSDConEurope 2001},
+  year={2001}
+}
+
+
+@article{ref:openonload,
+    title={OpenOnload},
+    author={{Solarflare}},
+    journal={http://www.openonload.org/},
+    year={2008},
+} 
+@article{ref:dpdk,
+    title={Intel Data Plane Development Kit},
+    author={{Intel}},
+    journal={http://edc.intel.com/Link.aspx?id=5378},
+    year={2012},
+}
+
+@article{Rizzo:cacm2012,
+ author = {Rizzo, Luigi},
+ title = {Revisiting network I/O APIs: the netmap framework},
+ journal = {Commun. ACM},
+ issue_date = {March 2012},
+ volume = {55},
+ number = {3},
+ month = mar,
+ year = {2012},
+ issn = {0001-0782},
+ pages = {45--51},
+ numpages = {7},
+ url = {http://doi.acm.org/10.1145/2093548.2093565},
+ doi = {10.1145/2093548.2093565},
+ acmid = {2093565},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+} 
+
+@article{ref:vtx,
+  author={Intel},
+  title= {Intel Virtualization Technology},
+  url = {http://www.intel.com/technology/itj/2006/v10i3/1-hardware/6-vt-x-vt-i-solutions.htm},
+  journal = {Intel Technology Journal},
+  volume = {10},
+  issue = {3},
+  month = aug,
+  year = { 2006},
+  issn = { 1535-864X},
+  doi =  { 10.1535/itj.1003.01}
+}
+
+@inproceedings{ref:netmap-atc,
+ author = {Rizzo, L.},
+ title = {{netmap: A Novel Framework for Fast Packet I/O}},
+ booktitle = {USENIX Annual Technical Conference ATC'12},
+ series = {Boston, MA},
+ year = {2012},
+ publisher = {USENIX Association},
+}
+
+@misc{ref:vale-home,
+   author = {Luigi Rizzo and Giuseppe Lettieri},
+   title = {{The VALE Virtual Local Ethernet home page}},
+   howpublished = {http://info.iet.unipi.it/$\sim$luigi/vale/}
+}
+
+@misc{ref:netmap-home,
+   author = {Luigi Rizzo},
+   title = {{The netmap project}},
+   howpublished = {http://info.iet.unipi.it/$\sim$luigi/netmap/}
+}
+
+@misc{ref:dna,
+    author = {Luca Deri},
+    title = {{PFRING DNA page}},
+    howpublished = {http://www.ntop.org/products/pf\_ring/dna/}
+}

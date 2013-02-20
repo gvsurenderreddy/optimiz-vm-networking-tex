@@ -1,6 +1,6 @@
 \chapter{Optimizations of emulated e1000 performance}
 \label{cha:e1000-opt}
-In the chapter \ref{chap:env} we have given an overview of the software environment we will deal with in this work.
+In chapter \ref{chap:env} we have given an overview of the software environment we will deal with in this work.
 In this chapter we will analyze problems and bottlenecks of the current system implementation and propose solutions that are able
 to remove them.
 
@@ -8,25 +8,32 @@ to remove them.
 
 First of all we have to point out what we are going to optimize. We consider two scenarios.
 
-In the first scenario, \emph{guest to guest} (G2G), two VM are run on the same host and are connected through a host-only virtual LAN (see 
-section \ref{sec:qemunet}). One of the two VMs runs an application that sends UDP packets of a given size at a given average rate, while 
-the other VM tries to receive all the UDP packets it can.
+In the first scenario, \emph{guest to host} (G2H), a VM is connected to the host through a host-only virtual LAN (see 
+section \ref{sec:qemunet}). The VM runs an application that sends UDP packets of a given size at a given average rate, while 
+the host runs an application that receives all the UDP packets it can.
 
-The second scenario, \emph{guest to host} (G2H), is similar to the first, but only a VM is present, and it runs the UDP sender application. The UDP receiver application
-is run by the host.
+The second scenario, \emph{host to guest} (H2G), is very similar to the first, but the host and guest roles are swapped: the host runs 
+the UDP sender while the guest runs the UDP receiver.
+
+Our goal is to maximize the packet rate of the application running on the VM, both on the transmit and the receive side.
+
+\vspace{0.5cm}
 
 In our experiments, we will try to give to each guest one or two VCPU, and discuss the differences between the two cases.
 
 \begin{figure}[bt]
 \centering
-\includegraphics[scale = 0.60]{scenario.pdf}
-\caption{Communication scenario in which and UDP sender is on a VM and an UDP receiver is on the host or on another VM.}
-\label{fig:scenario}
+\includegraphics[scale = 0.60]{scenario-1.pdf}
+\caption{Communication scenario in which and UDP sender on a VM communicates with and UDP receiver on the host.}
+\label{fig:scenario-1}
 \end{figure}
 
-\vspace{0.5cm}
-
-In these situations we want to maximize the packet rate, both on the transmit and receive side.
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.60]{scenario-2.pdf}
+\caption{Communication scenario in which and UDP sender on the host communicates with and UDP receiver on the VM.}
+\label{fig:scenario-2}
+\end{figure}
 
 
 \section{Analysys of the existing implementation}

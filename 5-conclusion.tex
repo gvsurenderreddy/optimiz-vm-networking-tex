@@ -23,9 +23,9 @@ More work can be done to achieve further improvements with the e1000 platform. I
 	some packet copy. For example, the current e1000 device emulation copies a TX packet from the guest memory to a local buffer: this
 	copy is essentially useless and it can be avoided with some memory mapping efforts.
 	
-  \item Latency: Interrupt moderation worsens latency, so we should implement some euristics aimed at bypass moderation interrupt delay
+  \item Latency: Interrupt moderation worsens latency, so we should implement some euristics aimed at bypassing moderation delay
 	when the network traffic requires low latency more than high packet rate (e.g. HTTP transactions).
 	
   \item TXP throughput: The key for performance here is big packets, more than high packet rate. The bigger packets you can make, the
-	higher throughput you can get. TSO/GSO features must be used, like Virtio does.
+	higher throughput you can get. TSO/GSO features must be exploited, like Virtio does.
 \end{itemize}

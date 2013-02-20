@@ -61,24 +61,22 @@
 
 Network performance is a critical aspect in Virtual Machine systems and its 
 importance is becoming increasingly important in the world of computing.
-These systems are commonly employed in the IT departments of several organizations, since they can help to 
-build services that are highly reliabile, availabile and secure, improve efficiency
-in computing resource usage, and so on.
+These systems are commonly employed in the IT departments of several organizations, since they allow IT administrator to build
+network services with high reliability, availability and security, or to improve efficiency in computing resource usage.
 
 \vspace{0.5cm}
 
 In this thesis we are going to analize the state of the art of virtual machine networking, evaluating advantages
 and drawbacks of the existing solutions.
 We then propose a new approach, showing that with a small amount of code modifications, we can bring a classic emulated
-network device (we take \texttt{e1000} as a reference example) to performances that are similar to the performances of 
+network device (we take \texttt{e1000} as a reference example) to performances that are comparable or superior to the performances of 
 paravirtualized solutions.
 
-\vspace{0.5cm}
-
-However, this is not enough to push the performance to the limit (expecially latency).
-Therefore, we put together the lessons learned, and introduce a new minimal paravirtualized solution, that can be implemented 
-in total with about 2400 lines of code (driver part and board emulation part) and it is intended to outperform the currently 
-existing solutions.
+%\vspace{0.5cm}
+%However, this is not enough to push the performance to the limit (expecially latency).
+%Therefore, we put together the lessons learned, and introduce a new minimal paravirtualized solution, that can be implemented 
+%in total with about 2400 lines of code (driver part and board emulation part) and it is intended to outperform the currently 
+%existing solutions.
 
 \end{abstract}
 
@@ -98,8 +96,10 @@ existing solutions.
 \input{4-e1000-paravirtualization}
 \input{5-conclusion}
 
-
-\input{bibliography}
+{\scriptsize
+\bibliographystyle{acm}
+\bibliography{citations}
+}
 
 \end{document}
 
