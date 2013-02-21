@@ -1,13 +1,13 @@
-\chapter{e1000 paravirtualization}
+\chapter{A paravirtualized e1000 adapter}
 \label{cha:paravirt}
 In chapter \ref{cha:e1000-opt} we have proposed two simple patches that boost the e1000 performances.
 The moderation patch involves only modification to the hypervisor, while the batching patch involves only modification to the
 guest device driver. These patches can be applied independently on each other, although batching generally works better if
-it comes together with moderation.
+used together with moderation.
 
 \vspace{0.5cm}
 
-Neverthless, in both cases the we have respected the original e1000 interface specification. In this way the guest can use the e1000 adapter
+However, in both cases the we have respected the original e1000 interface specification. In this way the guest can use the e1000 adapter
 with its original (or patched) driver and be unaware that it is actually in a Virtual Machine environment, and that the e1000 adapter is
 emulated.  This unawareness is the essence of the \emph{full virtualization} concept: The guest doesn't know to be emulated, so
 that we can run an unmodified OS on top of the VM and everything works fine.
@@ -25,11 +25,11 @@ and/or to get better performances.
 In this thesis we are interested in device paravirtualization, and in particular in network device paravirtualization.
 With this kind of paravirtualization, only the \emph{paravirtualized} device driver is aware of the virtualization, while the rest of the
 guest system is not.
-We can obtain a paravirtualized driver either by modifying an existing real driver, or by creating a new \emph{fake} driver. In the
-latter case the driver correspond to a new virtual (fake) device that does not really exist, but is just a stub used to communicate with 
-the outside world exporting to the guest OS the same interface exported by a real driver, so that the guest OS
-can make use of it without being aware that the device is a fake one.
-In both cases the paravirtualization requires hypervisor support.
+We can obtain a paravirtualized driver either by modifying an existing real driver, or by creating a new \emph{fake} driver and a new
+fake device emulator. In the latter case the driver correspond to a new virtual (fake) device that does not really exist, but is
+just a stub used to communicate with the hypervisor exporting to the guest OS the same interface exported by a real driver, so that the
+guest OS can make use of it without being aware that the device is a fake one. In both cases the paravirtualization requires hypervisor 
+support.
 
 In our case we could modify the e1000 Linux driver and the e1000 QEMU frontend, or we could create a new Linux network driver and
 a new QEMU frontend.
@@ -50,24 +50,29 @@ to do at least 5 VMExit while executing the interrupt routine, but if we knew th
 would become useless, or at least could be replaced with something cheaper.
 
 The purpose of a paravirtualized devices is therefore to estabilish an efficient communication between the device driver and the emulator
-(e.g. the QEMU frontend), while the guest OS think of the driver as being a driver of a real device.
-In order to make the communication efficient, we have to minimize VMExits, and so register accesses. The communication should be done, when
+(e.g. the QEMU frontend), while the guest OS thinks of the driver as being the driver of a real device.
+In order to make the communication efficient, we have to minimize VMExits, and so register accesses and interrupts. The communication
+should be done, when
 possible, through shared memory. The TX ring is an example of shared memory used for communication: The driver writes to the TX ring and
 the frontend reads from it (and then also writes back). The RX ring is another example.
+
+\vspace{0.5cm}
 
 However, also a paravirtualized driver needs to access register, since a register access is the only way the driver can notify the
 emulator to start some processing or, in general, to have side effects. The difference with a real driver is that a paravirtualized one
 does a register access only when is really essential, e.g. for notifications. For everything else, the communication is done through
 shared memory. A real device driver doesn't worry so much about accessing registers.
 
+Similarly, also a paravirtualized device emulator needs to send interrupts, since interrupts are the only way the emulator can notify
+the driver.
 
 
 \section{The Virtio standard}
-Virtio is a virtualization standard that aims at high I/O performances through device paravirtualization. This is done creating a completely
-new set of device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
+Virtio (\cite{ref:virtio}) is a virtualization standard that aims at high I/O performances through device paravirtualization. This is done
+creating a completely new set of device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
 similar to the Xen I/O paravirtualization and the VMware \emph{Guest Tools}.
 Virtio is an effort to estabilish a standard interface between drivers and hypervisors for paravirtualized I/O, in order to increase the 
-code reuse across platform. In this way we avoid having an independent I/O paravirtualization solution for each hypervisor.
+code reuse across different platforms. In this way we avoid having an independent I/O paravirtualization solution for each hypervisor.
 The Virtio standard defines different I/O (fake) devices, including a network adapter, a SCSI disk and a serial interface, and is currently
 supported by QEMU and Virtualbox. Linux and Windows drivers are available for Virtio devices.
 
@@ -89,8 +94,8 @@ communicate through the virtio infrastructure using an efficient and general mec
 
 \vspace{0.5cm}
 
-The organization illustrated in figure \ref{fig:virtio} is actually similar to the one used for real device emulation (e.g. e1000 standard).
-However the Virtio interface is explicitely designed for efficient communication between driver and hypervisor,
+The organization illustrated in figure \ref{fig:virtio} is actually similar to the one used for real device emulation (e.g. e1000 
+emulation). However the Virtio interface is explicitely designed for efficient communication between driver and hypervisor,
 while this is not true for real device hardware/software interfaces.
 
 \vspace{0.5cm}
@@ -107,29 +112,29 @@ the two peers can exchange data.
 A virtual queue can be used to exchange data in both directions: Therefore the posted buffers can be used both for output and for input 
 operations. Drivers can use zero, one or more queues, depending on their needs. For example, the virtio network device uses two virtual
 queues (one for receive and one for transmit), while the virtio block device uses only one.
-The buffers use to exchange data are represented in Virtio using scatter-gather lists\footnote{Each
-element in the list represents the guest physical address and a length of a physical contiguous chunk of memory}. With a single operation
+The buffers used to exchange data are represented in Virtio using scatter-gather lists\footnote{Each
+element in the list represents the guest physical address and the length of a physical contiguous chunk of memory.}. With a single operation
 a virtio frontend can send a scatter-gather list to a virtio backend. A single scatter-gather list can specify both input and output 
-requests. For example, the guest may send to the hypervisor a SG-list containing three buffers: An output buffer that specifies a 
+requests. For example, the guest may send to the hypervisor a SG list containing three buffers: An output buffer that specifies a 
 command and two input buffer that will be filled by the hypervisor with the response\footnote{This example could be valid for a virtio
 disk.}.
 
 \vspace{0.5cm}
 
 In more detail, when the guest wants to make requests to the hypervisor through a virtual queue, it invokes the \texttt{add\_buf} method
-on the virtual queue object, passing a SG-list and a non-NULL token which is returned when the SG has been consumed. As we have seen 
-previously, a single SG-list can be used to pass many output buffers (e.g. network packets to send) and many input buffers (e.g. memory 
+on the virtual queue object, passing a SG list and a non-NULL token which is returned when the SG list has been consumed. As we have seen 
+previously, a single SG list can be used to pass many output buffers (e.g. network packets to send) and many input buffers (e.g. memory 
 buffers where the hypervisor can store received network packets). The method returns the amount of space left in the queue, so that 
 the guest can stop adding new buffers when the queue is full.
-The \texttt{add\_buf} method doesn't notify the hypervisor about the new requests, but only inserts the new buffer in the ring associated
-with the virtual queue object. When a virtio driver wants to notify the hypervisor, it has to call the \texttt{kick} method. Of course
+The \texttt{add\_buf} method doesn't notify the hypervisor about the new requests, but only inserts the new buffer in the virtual queue.
+When a virtio driver wants to notify the hypervisor, it has to call the \texttt{kick} method. Of course
 the driver should kick the hypervisor only when necessary, and try to add as many buffers as possible before \emph{kicking} the hypervisor.
 
 When the hypervisor is notified, it extracts (pops) an SG list from the virtual queue and process the request, maybe asynchronously.
 When the processing is done, the hypervisor returns the used SG list to the virtual queue.
 The guest can poll for the request completion through the \texttt{get\_buf} function. This function is not blocking and returns NULL if 
-there are no returned used SG lists, or returns the token of a SG list that has been consumed. Only when the \texttt{get\_buf} is called
-the queue space used by a previous \texttt{add\_buf} is freed.
+there are no returned used SG lists, or returns the token associated to a SG list that has been consumed. Only when
+\texttt{get\_buf} is invoked the queue space used by a previous \texttt{add\_buf} is freed.
 
 The whole process is depicted in figure \ref{fig:virtqueue}.
 
@@ -153,7 +158,7 @@ The callback function can call the \texttt{get\_buf} so that it can process the 
 
 \vspace{0.5cm}
 
-In a similar way, the hypervisor can enable/disable guest notifications (kicks) \footnote{e.g. In our working environment this are
+In a similar way, the hypervisor can enable/disable guest notifications (kicks)\footnote{e.g. In our working environment this are
 implemented as guest MMIO accesses.}, since also this notifications are very expensive. When guest notifications are disabled,
 the \texttt{kick} method has no effect.
 
@@ -171,23 +176,26 @@ A virtio ring consists of three parts: the descriptor array where the guest chai
 SG list), the \emph{available} ring where the guest indicates what descriptors chains are ready for use, and the \emph{used} ring where the
 host indicates which descriptors chains it has used. Each descriptor contains the guest-physical address of the buffer, its length, an 
 optional \texttt{next} index for buffer chaining, and two flags: one to indicate whether the next field is valid and one controlling 
-whether the buffer is read-only or write-only. This allows a chained buffer to contain both readable and writable parts (this is 
+whether the buffer is read-only or write-only. This allows a buffer chain to contain both readable and writable parts (this is 
 useful for implementing a block device).
+
 The available ring consists of a free-running index (the \emph{avail} index)\footnote{The ring index is a 16 bit unsigned integer, 
 which is always incremented and is intended to overflow.}, an interrupt suppression flag, and an array of indices into the descriptor array 
-where each index references the head of a descriptor chains. As we can see, the available ring is separated from the descriptor array, 
+where each index references the head of a descriptor chain. As we can see, the available ring is separated from the descriptor array, 
 adding another level of indirection: The avail index references an entry of the avail ring and this entry references an entry of the
 descriptor array (an head of a descriptor chain).
 This separation of the descriptor array from the available ring is due to the asynchronous nature of the virtqueue. In fact the hypervisor
 extracts the chains in the same order in which they have been inserted, but may process them in a different order and/or asynchronously.
 In this case some chains could require more time than others, and so the available ring could circle many times with fast-serviced
-chains while slow descriptors might still await completion (this is useful for block device implementation).
+chains while slow descriptors might still await completion (once again this is useful for block device implementation).
 The interrupt suppression flag is set when the virtio driver invokes the \texttt{disable\_cb} and is suppressed when the
-\texttt{enable\_cb} is invoked. In this way the guest can implement a mitigation strategy for host notification (section 
+\texttt{enable\_cb} is invoked. In this way the guest can implement a mitigation strategy for hypervisor notifications (see section 
 \ref{sec:virtqueue}).
+
 The used ring has the same structure of the the available ring, but is written by the host as descriptor chains are consumed. Moreover,
 the each entry of used ring contains not only an index in the descriptor array, but also a \texttt{len} field which is used for input
-buffers: When an input buffer has been used, the hypervisor writes in this field the size of the read operation which wrote to the buffer.
+buffers: When an input buffer has been used, the hypervisor writes in this field the size of the read operation which has been done on 
+the buffer itself.
 
 The data structures are depicted in figure \ref{fig:vring}.
 
@@ -216,8 +224,8 @@ to get an used buffer, it invokes the \texttt{get\_buf} method so that it can cl
 
 \subsection{Minimizing notifications using Virtio}
 \label{sec:virtiomin}
-Let's see how we can build an Virtio driver that tries to minimize the notification rate in both directions, assuming we are dealing with
-our usual working environment (QEMUKVM as VMM and Linux as guest).
+Let's see how we can build an Virtio driver and device emulator that try to minimize the notification rate in both directions, assuming we
+are dealing with our usual working environment (QEMUKVM as VMM and Linux as guest).
 As we've seen so far, in our working environment notifications are very expensive, and so minimizing them leads to big performance
 improvements. Since Virtio is explicitely designed to work in a virtualized environment, it's easy to write a driver that minimizes
 notifications.
@@ -261,8 +269,8 @@ continuously processes (comsumes) the requests. In the second PCC, the producer 
 How are the notification minimized? Using the very same ideas introduced by NAPI (see section \ref{sec:napi}): When a notification comes,
 if the notification rate is high because the incoming work request is high, we disable notifications and start polling for
 requests. While there are requests to process we keep processing, keeping the notifications disabled. When there are no requests left, we
-exit the working cycle and reenable notifications, so that we can be notified in the future when new requests will come.
-This concept is employed for both the PCCs. To be complete, after the notification have been enabled the consumer 
+exit the working cycle and enable notifications, so that we can be notified in the future when new requests will come.
+This concept is employed for both the PCCs. To be precise, after the notifications have been enabled the consumer 
 checks again if there is other work to do. If true the notifications are disabled and the consumer reschedules itself. This is done because
 of a race condition that we will show in the following ``Race condition analysis'' subsection.
 Using this system, if the consumer is slower than the producer (see the discussion repoted in section \ref{sec:e1000-rx-g2h1vcpu}), the 
@@ -270,29 +278,37 @@ performances of the consumer/producer are very good.
 
 \vspace{0.5cm}
 
-Let's analyze how this system works, assuming the producers slower than the consumers. At the beginning notifications are 
-enabled in both driver and device emulator.As the kernel invokes \texttt{request} for the first time, the request is added to the 
+Let's analyze how this system works, assuming the producer slower than the consumer in both PCCs. At the beginning notifications are 
+enabled in both driver and device emulator. As the kernel invokes \texttt{request()} for the first time, the request is added to the 
 virtualqueue and the kick notifies the hypervisor. Because of the
-notification, \texttt{notification\_callback} is invoked: Further guest notifications are disabled and the QEMUBH worker is
+notification, \texttt{notification\_callback()} is invoked: Further guest notifications are disabled and the QEMUBH worker is
 scheduled. The QEMUBH worker starts processing requests and keep doing it as the virtqueue avail ring is not empty (and because of our 
 assumptions this is very unlikely to be empty). After the first request has been processed, the host successfully notifies the guest 
-(\texttt{virtqueue.notify()}), and therefore \texttt{virtqueue\_callback} is invoked: Further host notifications are disabled and the
-NAPI polling function is scheduled. The polling worker start to post-process requests and keep doing it as the used ring is not empty 
-(and it is unlikely to be so). As we can see, this system can, in theory, work without notifications, except for the first two ones.
-Of course this is not realistic, also because the \texttt{request} function could implement some form of stream control and tell the kernel
-to stop sending requests when it sees that the avail ring is full (this will happen because the consumer is fast). If requests stop, also
-the two consumers stop, notification are reenabled and the kernel can restart sending request (causing other notifications).
-Neverthless, the notification rate is still very low w.r.t. the request rate.
+(\texttt{virtqueue.notify()}), and therefore \texttt{virtqueue\_callback()} is invoked: Further host notifications are disabled and the
+NAPI polling function is scheduled. The polling worker starts to post-process requests and keeps doing it as the used ring is not empty 
+(and it is unlikely to be so because of our assumptions). 
+
+\vspace{0.5cm}
+
+As we can see, this system can, in theory, work without notifications, except for the first two ones. Of course this is not realistic, also
+because a consumer could be faster than a producer. For instance, the guest consumer (NAPI polling function) is often a fast one, and
+so the NAPI could not moderate adequately the host notifications. In this situation, some other form of moderation is necessary to get
+good performances.
+
+Moreover, the \texttt{request()} function could implement some form of stream control and tell the kernel to stop sending requests when it
+sees that the avail ring is full. If requests stop, also the two consumers stop and notification must be enabled, otherwise we couldn't
+tell the kernel to restart requesting. When the guest is notified again, the kernel can restart sending request 
+(causing another notification). Nevertheless, the notification rate can still be very low w.r.t. the request rate.
 
 
 \subsubsection{Race condition analysis}
 The consumer working cycle exits when there is no work left. Once exited, the notifications are enabled. The race exists because these
 two operations, namely checking for more work and enabling notifications are not atomic. If in beetween these operation the producer
 inserts more request in the virtual queue and tries to notify the consumer, the notification of this last request is not done because 
-notifications are disabled. If the consumer does not double check for more work after enabling notifications, and the consumer doesn't
-add other requests for an hour, tha last request stalls in the queue for an hour. Since the consumer double checks, however, it sees
+notifications are disabled. If the consumer does not double check for more work after enabling notifications, and the producer doesn't
+add other requests for an hour, the last request stalls in the queue for an hour. Since the consumer double checks, however, it sees
 that new requests have come while it was not polling and reschedules itself (and possibly consume the request immediately). In this
-way request cannot stall.
+way requests cannot stall. Figure \ref{fig:race} shows an example of race.
 
 \begin{figure}[bt]
 \centering
@@ -314,11 +330,11 @@ responsiveness of the event-loop).
 
 \section{An efficient Virtio network driver}
 \label{sec:virtionet}
-Using the ideas presented in section \ref{sec:virtiomin} one can build a very efficient virtio network driver and network device emulator 
+Using the idea presented in section \ref{sec:virtiomin} one can build a very efficient virtio network driver and network device emulator 
 (\emph{virtio-net}). The driver source can be found in the linux kernel sources (drivers/net/virtio\_net.c), while the device
 emulation can be found in the the QEMU source (hw/virtio-net.c).
 Since a network adapter deals with two independent data streams, one for TX and one for RX, two virtual queues are employed. The virtio
-block device uses just one virtual queue because the two streams are not independent, but are alwasy request and response.
+block device uses just one virtual queue because the two streams are not independent, but are always request and response.
 
 \vspace{0.5cm}
 
@@ -333,8 +349,8 @@ avail buffers. This situation is depicted in figure \ref{fig:pccs}.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.55]{pccs.pdf}
-\caption{On the top there is the sender (TX) virtual queue with its two Producer/Consumer Couples (PCCs). On the bottom there is the
-	 receuver (RX) virtual queue with its PCCs.}
+\caption{On the top there is the sender virtual queue with its two Producer/Consumer Couples (PCCs). On the bottom there is the
+	 receiver virtual queue with its PCCs.}
 \label{fig:pccs}
 \end{figure}
 
@@ -357,12 +373,12 @@ When the kernel invokes the \texttt{ndo\_start\_xmit} method, it does the follow
 	\texttt{netif\_stop\_queue()} and invoke \texttt{svq.enable\_cb\_delayed()}\footnote{This is a variant of the \texttt{enable\_cb}
 	method that delays the abilitation in the future. The variant is implented only if the Virtio EVENT\_IDX feature is set. However,
 	you cannot specify how far in the future the abilitation will take place.}.
-	We will be notified by the hypervisor when this pushes more used buffer to the used ring, so that we can call \texttt{get\_buf()}
-	to free queue space and add more new TX requests.
-	After notification are enabled we must do a double check for more used buffers otherwise we would incur the same race condition
+	We will be notified by the hypervisor when this pushes more used buffer to the used ring, so that we can
+	call \texttt{netif\_wake\_queue()} and the kernel can make new TX requests.
+	After notification are enabled we must do a double check for more used buffers otherwise we would run into the same race condition
 	described in section \ref{sec:virtiomin}. If there are more used buffers, we free them (in the same way as we do at point 1) and,
 	if now there is space enough for a new send, we disable the callback and tell the kernel it can restart making TX request (invoking
-	the \texttt{netif\_wake\_queue()}).
+	\texttt{netif\_wake\_queue()}).
 \end{enumerate}
 Note that while the avail ring is not full (e.g. while the \texttt{add\_buf} is successful) the sender virtual queue callback is never used,
 since the used buffers are cleaned at the beginning of the the \texttt{ndo\_start\_xmit} method.
@@ -371,11 +387,11 @@ is to use the callback.
 
 \vspace{0.5cm}
 
-The device emulator is implemented with the same scheme presented in section \ref{sec:virtiomin} (see figure \ref{fig:virtiocode}), where
-the guest notification are initially enabled.
-In this way the guest notification are mitigated when the guest sender is faster than the QEMUBH TX processing cycle.
+The device emulator part of the TX path is implemented with the same scheme presented in section \ref{sec:virtiomin} (see figure
+\ref{fig:virtiocode}), where the guest notification are initially enabled.
+In this way the guest notification are moderated when the guest sender is faster than the QEMUBH TX processing cycle.
 The TX processing is done basically calling \texttt{qemu\_sendv\_packet(sg)}\footnote{This is a simple variant of the
-\texttt{qemu\_send\_packet} function, that accepts a scatter-gather array.}, where \texttt{sg} is the SG list extracted by the avail ring.
+\texttt{qemu\_send\_packet()} function, that accepts a scatter-gather array.}, where \texttt{sg} is the SG list extracted by the avail ring.
 A copy is not performed in the hypervisor, but is necessary to map the guest physical memory onto the hypervisor virtual memory, since the
 virtio descriptors contains physical addresses. This mapping, however, is done internally by the \texttt{virtqueue.pop()}, so it's not
 visible to the device emulator.
@@ -384,64 +400,67 @@ visible to the device emulator.
 \subsection{RX path}
 The RX path uses the receiver virtual queue (\texttt{rvq}), where the virtual queue callback is initially enabled on the driver side.
 At initialization time, the driver must provide the hypervisor with some receive buffers, otherwise it cannot accept incoming
-packets\footnote{We've seen the same problem with e1000 in section \ref{sec:rxdriver}}. In other words, the driver has to fill the avail
+packets\footnote{We've seen the same problem with e1000 in section \ref{sec:rxdriver}.}. In other words, the driver has to fill the avail
 ring with receive buffers calling \texttt{add\_buf()} as many times as possible. A pointer to an empty \texttt{sk\_buff} is passed as
 token.
 
 \vspace{0.5cm}
 
-On the device emulation side (virtio-net frontend), the guest notification are initially disabled.
+On the device emulation side (virtio-net frontend), the guest notification are initially enabled.
 When the hypervisor receives a packet, the network backend invokes the \texttt{virtio\_net\_receive} method, that performs the
 following actions:
 \begin{enumerate}
   \item If there are no receive buffers to use, enable guest notifications, so that we will be notified when more receive buffers
 	are added to the avail ring. Then return 0 (the number of bytes received). When the QEMU network core sees that the virtio-net
-	frontend is not able to receive the packet, it puts the received packets into an internal queue. When the guests notification
-	comes, the frontend invokes \texttt{qemu\_flush\_queued\_packets}, so that the QEMU network core tries again to call
-	\texttt{virtio\_net\_receive} on each queued packet.
-	After we enable notifications, we must double check for more avail buffers, otherwise the usual race condition can show up.
+	frontend is not able to receive the packet, it puts the received packets into an internal queue (see section \ref{sec:frontback}). 
+	When the guests notification comes, the frontend invokes \texttt{qemu\_flush\_queued\_packets()}, so that the QEMU network core 
+	tries again to invoke \texttt{virtio\_net\_receive} on each queued packet.
+	After we enable guest notifications, we must double check for more avail buffers, otherwise the usual race condition can show up.
+	
   \item Pop a receive buffer from the virtual queue (\texttt{rvq.pop(sg)}).
-  \item Copy in this receive buffer the ethernet frame passed to \texttt{virtio\_net\_receive}.
-  \item Pushes the used buffer to the used ring. To be precise, the push operation is not performed with the \texttt{push()} method, 
-	but in two (or more) splitted calls. Firstly the \texttt{fill()} method is called to put an used SG list in the ring without
-	updating the user ring index, and then the \texttt{flush()} method is called to update the used ring index. The reason for this
+  
+  \item Copy to this receive buffer the ethernet frame passed to \texttt{virtio\_net\_receive}.
+  
+  \item Pushes the used buffer to the used ring. To be precise, the push operation is not performed with the \texttt{push} method, 
+	but in two (or more) splitted calls. Firstly the \texttt{fill} method is called to put an used SG list in the ring without
+	updating the user ring index, and then the \texttt{flush} method is called to update the used ring index. The reason for this
 	is that in general we need more avail SG lists (and so more \texttt{pop}) for a single ethernet frame. Since we don't want to
 	expose an used index that corrispond to a incomplete ethernet frame we can update the used index only when the received packets
 	is completely in the used ring.
+	
   \item Notify the guest with \texttt{rvq.notify()}.
 \end{enumerate}
 
-\vspace{0.5cm}
-
-The virtio driver is implemented with the same scheme presented in section \ref{sec:virtiomin}. The NAPI polling function is scheduled by
+The driver part of the RX path is implemented with the same scheme presented in section \ref{sec:virtiomin}. The NAPI polling function is
+scheduled by
 the receiver virtual queue callback, which also disable further callbacks. The polling function polls for used receive buffers calling
-\texttt{rvq.get\_buf()}, that returns the \texttt{sk\_buff} token. Each used buffer is processed by the \texttt{receive\_buf} function,
-which invokes the \texttt{netif\_receive\_skb} as last operation.
+\texttt{rvq.get\_buf()}, that returns the \texttt{sk\_buff} token. Each used buffer is processed by the \texttt{receive\_buf()} function,
+which invokes the \texttt{netif\_receive\_skb()} as last operation.
 When the working cycle exits, it means that the NAPI budget is over or that no more used buffer are ready.
 At this point the polling function has made room in the avail ring and so refills it with new receive buffers\footnote{Observe that the
 receive buffer management is very similar to the one employed by e1000.}.
 
-At this point the callback is disabled and the usual double check performed (with callback enabling and NAPI rescheduling if there are
+After that the callbacks are enabled and the usual double check performed (with callbacks disabling and NAPI rescheduling if there are
 more used buffers).
 
 
 \subsection{Other details}
 In this section we've outlined the most important details about \emph{virtio-net} implementation. However, we have skipped some details
 such as out-of-memory (OOM) managment, and receive buffer allocation/deallocation and processing.
-In fact three type of receive buffers can be used: \emph{small} buffers, \emph{big} buffers and \emph{mergeable} buffers. For more
+In fact three types of receive buffers can be used: \emph{small} buffers, \emph{big} buffers and \emph{mergeable} buffers. For further
 information refer to the source code.
 
 \vspace{0.5cm}
 
 Another important feature is the use of TSO/GSO\footnote{Generic Segmentation Offload is a network driver feature that extends the TSO
 concept to other protocols, such as UDP.} kernel support (introduced in section \ref{sec:e1000-hardware}), that allows to transmit
-and receive very big packets (up to about 64KB), which entails huge improvements in TCP throughput compared with the case in which
-GSO packets are not used.
+and receive very big packets (up to about 64KB). These features lead to huge improvements in TCP throughput with reference to a case in
+which TSO/GSO packets are not used.
 
 
 \subsection{Performance analysis}
 In this section we will preform the same experiments presented in section \ref{sec:e1000perf}, so that we can compare the result with
-the e1000 performance (patched or unpatched.
+the e1000 performance (patched or unpatched).
 
 \subsubsection{TX performance}
 \label{sec:virtionet-perf-tx}
@@ -464,15 +483,18 @@ performance is good ($\sim 160$ Kpps). At the same time, the TX notification rat
 \end{table}
 
 What happens here is that the producer (the guest) is faster than the consumer (the hypervisor) in the TX direct PCC: This is why the 
-hypervisor (almost) never needs to exit from its working cycle and so (almost) never enables the guest notification. 
-Since the guest is faster, the sender virtual queue 
-should be always close to full: As soon as the hypervisor makes some room, the guest should replenish it, tell the kernel to stop 
-sending packets, and reenable interrupts. In the TX reverse PCC, in other words, the consumer (the guest) is faster than the producer 
-(the hypervisor).
+hypervisor (almost) never needs to exit from its working cycle and so (almost) never enables guest notifications.
+
+\vspace{0.5cm}
+
+Since the guest is faster, the sender avail ring
+should be always close to full: As soon as the hypervisor consumes some avail buffers, the guest should replenish the avail ring, tell the 
+kernel to stop sending packets, and enable interrupts. In the TX reverse PCC, in other words, the consumer (the guest) is faster than the
+producer (the hypervisor).
 In this scenario, therfore, the interrupt rate should be very high, because the system would
 enter in a permanent \emph{almost-full} state:
 \begin{enumerate}
-  \item The sender virtual queue has space for only one (or a very few) packet, therefore rapidly replenishes the queue and enables the
+  \item The sender queue avail ring has space for only one (or a very few) packet, therefore rapidly replenishes the ring and enables the
 	interrupts.
   \item As soon as the hypervisor processes the next TX packet (making room in the queue), it notifies the guest. The cycle go on from
 	point 1.
@@ -481,16 +503,16 @@ In this situation we should have nearly one interrupt per packet, and so bad per
 \ref{tab:virtionet-tx-g2h1vcpu} we don't see this circumstance because of the way the interrupts are enabled. As we have seen in 
 section \ref{sec:virtionet-tx}, the \texttt{enable\_cb\_delayed} method is used in place of \texttt{enable\_cb}. In this way the interrupts
 are enabled after a while, and not immediately. In the current implementation, the interrupt are enabled when the hypervisor has processed
-$\frac{3}{4}$ of the pending packets in the queue\footnote{in our case the queue is full}. Therefore when an interrupt comes, 75\% of the
-queue is empty, and not just one packet. In other words, the system enters a state in which the guest is notified every 192
-packets\footnote{The current default size for a virtual queue is 256, and so $256 \cdot 0.75 = 192$.}, and still the queue is never
+$\frac{3}{4}$ of the pending packets in the queue\footnote{In our case the queue is full of pending packets.}. Therefore when an interrupt
+comes, 75\% of the queue is empty, and not just one packet. In other words, the system enters a state in which the guest is notified every
+192 packets\footnote{The current default size for a virtual queue is 256, and so $256 \cdot 0.75 = 192$.}, and still the queue is never
 empty (so the hypervisor never stops) because the guest is fast to replenish the queue. In conclusion we should expect an interrupt rate of
 $\frac{158.115 Kpps}{192} = 0.823$ KHz, which is exactly what we have in the table.
 
 \vspace{0.5cm}
 
 Although not implemented with timers, the \texttt{enable\_cb\_delayed} method is just a different \emph{incomplete} form of interrupt 
-mitigation.
+moderation.
 It is used to moderate the notification rate within a PCC where the consumer is faster than the producer: In our case
 the producer is the hypervisor, which produces used buffers, and the consumer is the driver, which consumes (free) used buffers.
 In order to see the mitigation effects, we have tried to run the same experiment with a modified virtio-net driver, where \texttt{enable\_cb}
@@ -529,7 +551,7 @@ In our case, the TX reverse PCC, there is not such a problem, for two reasons:
   \item Considering the way the TX path is implemented (see section \ref{sec:virtionet-tx}), we don't care about having used TX buffers
 	freed as soon as possible, since they are basically freed when needed.
 \end{itemize}
-In the RX path we are not so lucky (see section \ref{sec:virtionet-perf-rx}).
+In the RX path we are not so lucky (see the next subsection).
 
 \vspace{0.5cm}
 
@@ -575,27 +597,27 @@ Also in this case, the reason for low performance is tied to the lack of interru
 very high (57 KHz), because Virtio does not limit the interrupt rate in any way. From an high interrupt rate we can infer that in the 
 RX direct PCC, the consumer (the NAPI) is faster than the producer (hypervisor): This results in only about 2
 packets processed by the polling function for each interrupt.
-We could add mitigation in the same way done for the TX inverse PCC (section \ref{sec:virtionet-perf-tx}): Using
+We could add mitigation in the same way we have added it in the TX inverse PCC (see the previous subsection): Using
 the \texttt{enable\_cb\_delayed} method in place of the \texttt{enable\_cb} method when exiting from the NAPI working cycle.
 However, this simply cannot be done:
 \begin{itemize}
-  \item On the RX path, the \emph{master} is the hypervisor and so the guest (the\emph{slave}), when calling
+  \item On the RX path, the master is the hypervisor and so the guest (the slave), when calling
 	\texttt{enable\_cb\_delayed()}, cannot know when the next packet will be received by the hypervisor, and therefore cannot know
 	when a total of 192 packets will be received. Since the Virtio mitigation is incomplete, up to 191 RX packets could stall
 	in the used ring. Of course, this is not acceptable.
   \item Latency is affected negatively by the mitigation in this case.
 \end{itemize}
-A complete form of mitigation is here the only solution.
+A complete form of mitigation is here the only solution, but this has not been implemented yet.
 
 \vspace{0.5cm}
 
-On the RX reverse PCC the consumer (hypervisor) is slower than the producer (hypervisor) and consequently the RX notification rate is
+On the RX reverse PCC the consumer (hypervisor) is slower than the producer (guest) and consequently the RX notification rate is
 very good (about zero notifications).
 
 \vspace{0.5cm}
 
-The measured results are shown in table \ref{tab:virtionet-rx-g2hvcpu}. There is not a substantial difference with the 1-VCPU case, because
-there is not enough parallelism in the guest to exploit.
+The measured results for the 2-VCPU case are shown in table \ref{tab:virtionet-rx-g2hvcpu}. There is not a substantial difference with
+the 1-VCPU case, because there is not enough parallelism in the guest to exploit.
 
 \begin{table}
 \begin{center}
@@ -619,11 +641,11 @@ In the previous sections we've seen how is possible to get good performances usi
 efficient because the only make use MMIO accesses and interrupts to notify the other peer of a virtual queue, and exchange data and
 metadata through shared memory.
 However, the Virtio interface must also be general enough to support different kind of devices and is not specifically tailored to the
-network device world: Most of the complications comes from the need of device driver support. As an example, a network driver don't need
-two rings (avail and used) for each virtual queue, and don't even need to separate the ring from the descriptor table. The descriptor
-table and two indices in that table would have been enough.
+network device world: Most of the complications come from the need of a paravirtualized disk device. As an example, a network driver
+doesn't need two rings (avail and used) for each virtual queue, and doesn't even need to separate the ring from the descriptor table. The
+descriptor table and two indices in that table would have been enough.
 Moreover, a complete mitigation scheme is not implemented, and this is a limitation in same situations (see section
-\ref{sec:virtionet-perf-rx}),
+\ref{sec:virtionet-perf-rx}, RX performance),
 Lastly, the Virtio solution requires a completely new set of device drivers/emulators, which is a greater effort than modifying
 an existing device driver/emulator.
 
@@ -637,23 +659,23 @@ As usual, we will try to minimize the modifications to the existing code, so tha
 \label{sec:e1000-par-async}
 In the e1000 emulation we've seen so far, the TX processing is done by a VCPU thread (section \ref{sec:e1000txemu}).
 A better solution however, is to employ the processing/notification scheme presented in section \ref{sec:virtiomin} (e.g. NAPI-like 
-mitigation), in which the hypervisor processing (in this case TX processing) is done asynchronously using a QEMUBH.
+moderation), in which the hypervisor processing is done asynchronously using a QEMUBH.
 In this way the TX processing is executed by the IOThread in parallel to the VCPUs.
 
 
 \subsection{Communication Status Block}
 In order to implement an efficient communication scheme we have to remove, where possible, MMIO accesses that exchange data, leaving only
-accesses that implement geust notifications to the hypervisor.
-Writes to TDT and RDT registers are used for two functions:
+accesses that implement guest notifications to the hypervisor.
+As an example, writes to TDT and RDT registers are used for two functions:
 \begin{enumerate}
-  \item (notify) Notify the hypervisor that there is something new to process (new TX descriptors to process or new Rx descriptors to use).
+  \item (notify) Notify the hypervisor that there is something new to process (new Tx descriptors to process or new Rx descriptors to use).
   \item (status) Tell the hypervisor which descriptors have just been added.
 \end{enumerate}
-A notification (1), however, is not always necessary\footnote{For example, it's not necessary if the other peer is in its working cycle}, 
+A notification (1), however, is not always necessary\footnote{For example, it's not necessary if the other peer is in its working cycle.}, 
 while status information exchange (2) is always desirable, so that the other peer is always updated and it's less likely to exit from its
 working cycle.
-It would then be better to split these functions: TDT/RDT writes are used only for notifications, while status exchange can be done using
-shared memory. For these reasons a dedicate block of shared memory, called \emph{Communication Status Block} (CSB), has been allocated
+It would then be better to split these functions: TDT/RDT writes should be used only for notifications, while status exchange can be done
+using shared memory. For these reasons a dedicate block of shared memory, called \emph{Communication Status Block} (CSB), has been allocated
 in the guest memory. The CSB is a set of 32-bits words that are used to exchange information about the status of the communication without
 VMExits.
 
@@ -663,7 +685,7 @@ The CSB contains the following words:
 \begin{itemize}
   \item TXSNTS (Tx Software Next To Send): is synchronized with the \texttt{tx\_next\_to\_use} variable (when in a coherent state). In 
 	short, where the \texttt{ndo\_start\_xmit} starts to insert new TX descriptors in the TX ring. It is used to replace the status
-	information exchange of the TDT register.
+	information function of the TDT register.
 	
   \item TXHNTS (Tx Hardware Next To Send): is synchronized with the TDH register. In short, where the hardware takes the next TX descriptor
 	to process.
@@ -672,7 +694,7 @@ The CSB contains the following words:
 	routine takes the next used TX descriptor to clean.
 	
   \item RXSNTP (Rx Software Next To Prepare): is synchronized with the \texttt{rx\_next\_to\_use} variable. In short, where the driver
-	adds new RX descriptor to use for reiceving new frames.
+	adds new RX descriptors to use for reiceving new frames.
 	
   \item RXHNTR (Rx Hardware Next To Receive): is synchronized with the RDH register. In short, where the hardware takes the next RX
 	descriptor to use for an incoming frame.
@@ -697,35 +719,35 @@ How we can see, these variables capture in each moment the status of the communi
 copies of registers (TXHNTS and RXHNTR) or shadow copies of existing driver variables (TXSNTS, TXSNTC, RXSNTP and RXSNTR), therefore
 nothing new so far. Shadow copies of registers are useful because the driver can read them without a VMExit. Shadow copies of existing
 variables are useful only for technical reasons: they allow us to have all the interesting variables in a contiguous chunk of physical 
-memory so that the driver only has to tell the hardware the CSB physical address. Otherwise the driver should tell the hardware a different
-physical address for each interesting variable\footnote{In the current implementation the memory for these variables is not allocated all
-together, so the driver data memory is not necessarily contiguous.}
+memory so that the driver can to tell the hardware only the CSB physical address. Otherwise the driver should tell the hardware a different
+physical address for each interesting variable\footnote{In the existing e1000 driver the memory for these variables is not allocated all
+together, so the driver data memory is not necessarily contiguous.}.
 
 \vspace{0.5cm}
 
 On the other end, TXNTFY and RXNTFY are something new. These are used by the hardware to disable TDT writes and RDT writes when
-these are not necessary anymore. As we have outlined in section \ref{sec:e1000-par-async}, the idea is to implement the usual
-producer/consumer scheme (NAPI-like mitigation), which requires a method for the consumer to disable producer mitigations.
+these are not necessary. As we have outlined in section \ref{sec:e1000-par-async}, the idea is to implement the usual
+producer/consumer scheme (NAPI-like moderation), which requires a method for the consumer to disable producer notifications.
 
 \vspace{0.5cm}
 
-Similarly to what happens to the other shared memory structures (e.g. TX/RX rings), the hardware must be told how the CSB has been allocated
-in the guest physical memory. For these reason, two 32-bit registers, CSBBAH (CSB Base Address High) and CSBBAL (CSB Base Address Low)
-have been added to the register set. The driver must write the physical address of the CSB to these registers.
+Similarly to what happens to the other shared memory structures (e.g. TX/RX rings), the hardware must be told where the CSB has been
+allocated in the guest physical memory. For these reason, two 32-bit registers, CSBBAH (CSB Base Address High) and CSBBAL (CSB Base
+Address Low) have been added to the register set. The driver must write the physical address of the CSB to these registers.
 
 
 \subsection{Implementation}
-This and the section briefly reports what changes have been added to the RX and the TX path to implement e1000 paravirtualization.
+This section briefly reports what changes have been added to the RX and the TX path to implement e1000 paravirtualization.
 The changes are relative to the existing implementation of e1000, possibly improved with the moderation patch.
-As we have already observed, interrupt moderation is very useful within PCCs in which the hypervisor is the producer, when the consumer
-is faster than the consumer. However, the paravirtualization patch is independent on the moderation patch.
+As we have already observed, interrupt moderation is very useful within PCCs in which the hypervisor is the producer, and the guest is
+is faster than the hypervisor. However, the paravirtualization patch is independent on the moderation patch.
 The driver batching mechanism, on the other hand, is not intended to be used jointly with paravirtualization, simply because this would not
-make any sense: Since paravirtualization export the status of the communication, there's no need to flush pending TX descriptors, we just
+make any sense: Since paravirtualization exports the status of the communication, there's no need to flush pending TX descriptors, we just
 have to notify the hypervisor when necessary.
 
 \vspace{0.5cm}
 
-A new parameter, \texttt{paravirtual}, has been added to the e1000 module. The parameter value can be specified only ad module loading time
+A new parameter, \texttt{paravirtual}, has been added to the e1000 module. The parameter value can be specified only at module loading time
 and cannot be changed dynamically. When \texttt{paravirtual} is 0, the driver is the original one, and the device emulator (e1000 frontend)
 behaves as usual\footnote{To keep the code simple, the CSB is always allocated even if \texttt{paravirtual} is 0.}. When 
 \texttt{paravirtual} is 1, the driver allocates the CSB, initializes it, and writes its physical address to the CSBBAH and CSBBAL registers.
@@ -747,15 +769,16 @@ one descriptor, the QEMUBH is rescheduled. Otherwise TXNTFY is set to 1, and the
 TXNTFY is cleared and the QEMUBH rescheduled. If new work hasn't come yet we don't reschedule the QEMUBH.
 Note that we reschedule even if just one descriptor has been processed, and not only if a full burst (256) of descriptors has been processed:
 This is a form of \emph{spinning} that can be useful when dealing with fast backends, because we make the QEMUBH more likely to be
-rescheduled, and so the TX notification more likely to be disabled. The spinning can work well in this case because the QEMUBH handler is
-not executed immediately, but in the next event-loop iteration, so that the guest has some time to post more work in the queue.
+rescheduled, and so the TX notification more likely to be disabled. The spinning can work well in this case because, after rescheduling,
+the QEMUBH handler is not executed immediately, but in the next event-loop iteration, so that the guest has some time to post more work 
+in the queue.
 
 
 \subsubsection{Changes in the RX path}
 At the end of \texttt{e1000\_alloc\_rx\_buffers} in the original driver, where the RDT would be updated, we changed the code so that
 RXSNTP is updated, but RDT is updated only if RXNTFY is set.
 In the RDT write handler, if the RDT write actually gives some new receive buffers, RXNTFY is cleared to disable further RX notifications.
-Remember that is the last case \texttt{qemu\_flush\_queued\_packets()} is called (see section \ref{sec:frontback}). 
+Remember that in this last case \texttt{qemu\_flush\_queued\_packets()} is called (see section \ref{sec:frontback}). 
 When the hardware runs out of receive buffers, the e1000 \texttt{can\_receive} method returns 0. Before returning, however, it has to
 set RXNTFY, so that when new receive buffers are put in the RX ring, a RDT write can flush the queued packets (if any).
 After notifications have been enabled, as usual, a double check is performed in order to avoid race conditions.

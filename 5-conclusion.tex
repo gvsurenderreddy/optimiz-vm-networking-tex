@@ -3,28 +3,32 @@ In this work we have shown how is possible to boost the packet-rate performance 
 Machine environment.
 First of all we analyzed the existing implementation and we pointed out its problems and bottlenecks.
 Then we proposed a patch to the QEMU e1000 frontend (the \emph{moderation} patch) and a patch to the Linux e1000 driver (the \emph{batching}
-patch) that ecan be used, independently on each other, to improve performances. Both patches are very simple and don't extend the e1000
+patch) that can be used, independently on each other, to improve performances. Both patches are very simple and don't extend the e1000
 interface specification.
 After that we analyzed the Virtio I/O paravirtualization framework and provided a small extension to the e1000 interface that allows to remove
 some inefficiency by porting the I/O paravirtualization concepts to the e1000 platform.
 
 \vspace{0.5cm}
 
-Comparing the TX and RX performances of the existing implementation with our best results (e1000 paravirtualization) we have obtained
+Comparing the TX and RX performances of the existing e1000 implementation with our best results (e1000 paravirtualization) we have obtained
 a $8.9 \times$ speed-up on the TX path and a $22 \times$ speed-up on the RX side.
 This packet rate performance is comparable or superior to the Virtio performance and is obtained with small modification to the e1000
 driver and device emulator.
+
+A short paper (\cite{ref:e1000-opt}) collecting the ideas presented in this work, in combination with the VALE (\cite{ref:vale}) fast 
+software switch, has been submitted to USENIX ATC'13.
 
 \vspace{0.5cm}
 
 More work can be done to achieve further improvements with the e1000 platform. In particular, three aspects can be optimized:
 \begin{itemize}
   \item Packet-rate: Although this parameter is the optimization objective of these thesis, we can further improve performance removing
-	some packet copy. For example, the current e1000 device emulation copies a TX packet from the guest memory to a local buffer: this
+	some packet copies. For example, the current e1000 device emulation copies a TX packet from the guest memory to a local buffer: this
 	copy is essentially useless and it can be avoided with some memory mapping efforts.
 	
   \item Latency: Interrupt moderation worsens latency, so we should implement some euristics aimed at bypassing moderation delay
 	when the network traffic requires low latency more than high packet rate (e.g. HTTP transactions).
+	Moreover, MSI/MSI-X (\cite{ref:msi}) interrupts can be used in place of the classic interrupt mechanism.
 	
   \item TXP throughput: The key for performance here is big packets, more than high packet rate. The bigger packets you can make, the
 	higher throughput you can get. TSO/GSO features must be exploited, like Virtio does.

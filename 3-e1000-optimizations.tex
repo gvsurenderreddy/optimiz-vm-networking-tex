@@ -11,9 +11,8 @@ First of all we have to point out what we are going to optimize. We consider two
 In the first scenario, \emph{guest to host} (G2H), a VM is connected to the host through a host-only virtual LAN (see 
 section \ref{sec:qemunet}). The VM runs an application that sends UDP packets of a given size at a given average rate, while 
 the host runs an application that receives all the UDP packets it can.
-
 The second scenario, \emph{host to guest} (H2G), is very similar to the first, but the host and guest roles are swapped: the host runs 
-the UDP sender while the guest runs the UDP receiver.
+the UDP sender while the guest runs the UDP receiver. These scenarios are depicted in figures \ref{fig:scenario-1} and \ref{fig:scenario-2}.
 
 Our goal is to maximize the packet rate of the application running on the VM, both on the transmit and the receive side.
 
@@ -36,12 +35,12 @@ In our experiments, we will try to give to each guest one or two VCPU, and discu
 \end{figure}
 
 
-\section{Analysys of the existing implementation}
+\section{Analysis of the existing implementation}
 \label{sec:e1000perf}
 We are now going to show and discuss the performance of the existing solution, e.g. of the machanisms illustrated in section 
 \ref{sec:e1000emu} and \ref{sec:e1000driver}.
-All the measurements have been done on a laptop machine with an i5-2450M processor, which is endowed with four cores running at 2.5GHz
-\footnote{The linux CPU frequency manager has been used to set the CPU frequency at the maximum possible frequency.}.
+All the measurements have been done on a laptop machine with an i5-2450M processor, which is endowed with four cores running at 
+2.5GHz\footnote{The linux CPU frequency manager has been used to set the CPU frequency at the maximum frequency.}.
 
 \subsection{TX performance}
 \label{sec:e1000txperf}
@@ -53,8 +52,8 @@ With this test we push to the limit the TX performances in the short packet case
 
 \subsubsection{1 VCPU test}
 \label{sec:e1000-tx-g2h1vcpu}
-The measurement results are shown in the table \ref{tab:e1000-tx-g2h1vcpu}. The guest has been assigned 1 VCPU, and all the values are computed
-counting the number of occurrencies of each event over a 1 second period and then dividing the count by the period itself.
+The measurement results are shown in the table \ref{tab:e1000-tx-g2h1vcpu}. The guest has been assigned 1 VCPU, and all the values are
+computed counting the number of occurrences of each event over a 1 second period and then dividing the count by the period itself.
 
 \begin{table}
 \begin{center}
@@ -77,16 +76,18 @@ As we can see, the TX rate is very modest, about 20.5 Kpps. There is a TX notifi
 each packet sent. The total number of MMIO accesses is 6 times the number of interrupts.
 
 The high MMIO access rate is due to the interrupt routine. 
-When invoked, in fact, the interrupt routine has to VMExits at least 5 times:
+When invoked, in fact, the interrupt routine has to VMExit at least 5 times:
 \begin{enumerate}
-    \item Reads the ICR (Interrupt Cause Read) register, in order to get the Interrupt reason (if any).
-    \item Writes to the IMC (Interrupt Mask Clear) register, in order to disable the interrupts.
-    \item Reads from the STATUS regsiter, in order to flush the previous register write.
-    \item After the NAPI work is completed, it write to the IMS (Interrupt Mask Set) register in order to reenable the interrupts.
-    \item Reads form the STATUS register, in order to flush the previous register write.
+    \item Read the ICR (Interrupt Cause Read) register, in order to get the Interrupt reason (if any).
+    \item Write to the IMC (Interrupt Mask Clear) register, in order to disable the e1000 interrupts.
+    \item Read from the STATUS register, in order to flush the previous register write.
+    \item After the NAPI work is completed, write to the IMS (Interrupt Mask Set) register in order to enable the interrupts.
+    \item Read form the STATUS register, in order to flush the previous register write.
 \end{enumerate}
 
 The sixth MMIO access per interrupt is due to the TX notification.
+
+\vspace{0.5cm}
 
 Even if the hardware interrupt moderation is not emulated, the Linux e1000 driver uses the NAPI interface (section \ref{sec:napi}), so 
 a software interrupt
@@ -96,7 +97,7 @@ the to TDT register, after the VMExit, executes the e1000 frontend, the TAP back
 it does a VMEnter coming back to the guest world, but with a TX interrupt to handle. Since the guest
 has only a VCPU, the VCPU must be used to handle the interrupt, and cannot be used to insert more TX frames into the ring (e.g. to call
 the \texttt{ndo\_start\_xmit} method). Consequently, the NAPI polling function will only clean the TX descriptor(s) associated to the
-frame sent.
+frame that has just been sent.
 In conclusion, if we write to the TDT register every time the \texttt{ndo\_start\_xmit} method is invoked, we are doomed to receive
 an interrupt for each frame we send, and so to have low performances.
 
@@ -122,13 +123,14 @@ The same experiment has been done assigning 2 VCPU to the guest. The measurement
 \end{table}
 
 Compared with the 1-VCPU case, the situation is slightly better, but still modest. Here we have about 30 Kpps, and an interrupt rate
-that is significantly less than that. This means that every TX interrupt, on average, handles more than one frame.
+that is significantly less than that. This means that the TX interrupt routine (e.g. the polling function), on average, handles more than
+one frame.
 Note that there is still only one TX frame sent for each TX notification, like in the 1-VCPU case.
 The improvement is due to the higher degree of parallelism in the guest, that allows the NAPI to coalesce some interrupts, so that
-on average about 1.29 data TX descriptors are cleaned for each interrupt. THis happens because while one VCPU is executing the interrupt
+on average about 1.29 data TX descriptors are cleaned for each interrupt. This happens because while one VCPU is executing the interrupt
 routine (or the NAPI context is active) with the e1000 interrupts disabled, the other VCPU can find the time to insert another TX frame
 in the ring, execute the frontend and backend and return to the guest without raising an interrupt because they are disabled.
-In this way sometimes the NAPI polling routines cleans more than one data TX descriptor.
+This is why, sometimes, the NAPI polling function cleans more than one data TX descriptor.
 
 
 \subsubsection{Discussion}
@@ -145,8 +147,8 @@ a second optimization we can implement.
 \vspace{0.5cm}
 
 We've not discussed the performances with bigger packet sizes, because the problems involved are exactly the same. When the packets are 
-big there is more work to do because the packet copies are more expensive, and so the performance are lower. However, we will show that
-the optimization are very affective also for the big packet case, because the overhead due to the copies is significantly lower than
+big there is more work to do because the packet copies are more expensive, and so the performance are lower. However,
+the optimization are very effective also for the big packet case, because the overhead due to the copies is significantly lower than
 the overheads due to TX notifications and interrupts.
 
 
@@ -160,19 +162,44 @@ With this test we push to the limit the guest RX performances in the short packe
 
 \vspace{0.5cm}
 
-The receiving process is generally more problematic than the transmit process, because of the \emph{livelock} problem.
-Wehn the incoming packet rate and/or the interrupt rate are too high, or the traffic is very irregular (e.g. it's very bursty), the guest
-OS does a lot of processing (device driver and network stack) before trying to put the packet in a socket receive queue, but in the end it
-is forced to throw it away because the queue is full. In its turn, the queue is full because the receiver process doesn't have enough
+The receiving process is generally more problematic than the transmit process, because of the \emph{livelock} problem (see section 
+\ref{sec:e1000int}).
+When the incoming packet rate and/or the interrupt rate are too high, or the traffic is very irregular with high traffic peaks, the guest
+OS (device driver and network stack) does a lot of processing before trying to put the packet in a socket receive queue, but in the end
+is forced to throw them away because the queue is full. In its turn, the queue is full because the receiver process doesn't have enough
 time to read all the packets from the queue.
 
-For this reason there is a \emph{critical} RX packet rate that, if exceeded, causes some percentage of packets to be dropped.
+\vspace{0.5cm}
+
+For this reason we introduce the concept of (receiver) \emph{critical} rate. We define the critical rate as the incoming packet rate that,
+if exceeded, cause the receiver VM to enter a unstable state and/or a state characterized by bad performance. In more detail, in our
+experiment we will see the RX rate measured by the UDP receiver as a function of the RX rate measured by the network adapter (the incoming 
+rate).
+When the incoming rate is low enough, the UDP receiver will measure the same rate, because no packets are dropped. As the incoming rate gets
+higher a little percentage of packets starts to be dropped, and so the UDP-measured rate is a little lower than than the incoming rate, but
+still increases when the incoming rate increases. When the incoming rate exceeds the critical rate, however, the UDP-measured rate starts
+to decrease when the incoming rate increases. Moreover, beyond the critical rate the UDP-measured rate generally oscillates, e.g. the
+receive system becomes unstable and its responsiveness becomes very low.
+Figure \ref{fig:cr} shows an example of the function we are talking about.
+
+\begin{figure}[bt]
+\centering
+\includegraphics[scale = 0.55]{critical-rate.pdf}
+\caption{This plot is an example the RX rate measured by the UDP receiver as a function of the RX rate measured by the network adapter.
+	 The critical rate is the incoming rate for which this function has a maximum. The gray area represent the oscillation (upper and
+	 lower bound) of the UDP-measured RX rate.}
+\label{fig:cr}
+\end{figure}
+
+\vspace{0.5cm}
+
+The critical rate is very significant, since it tells what is the maximum incoming rate that a guest OS running simple receiver process can
+accept while being in a stable state.
 
 
 \subsubsection{1 VCPU test}
 \label{sec:e1000-rx-g2h1vcpu}
 In this test one VPCU is assigned to the guest. The measured critical RX packet rate is about 14.4 Kpps.
-This means that if the incoming packet rate is smaller that, the receiver process is able to receive very packet, and nothing is dropped.
 The measurement results shown in table \ref{tab:e1000-rx-g2h1vcpu} are taken when the received rate is about the same as the critical
 rate.
 
@@ -197,14 +224,14 @@ The critical RX rate is very low. If we keep incrementing the incoming RX rate b
 state. Since more RX interrupt work is requested and we only have a VCPU, the receiver user process has less CPU time than before, even
 if there are more packets to receive. As a result, the RX throughput seen by the user process drops immediately after the critical rate,
 the system become extremely instable, and most of the packets are dropped. With packet rates higher than 15 Kpps the system becomes
-inusable.
+unusable.
 
 \vspace{0.5cm}
 
 Let's analyze what happens when the livelock doesn't shows up (table \ref{tab:e1000-rx-g2h1vcpu})
 The interrupt rate is a little lower than the RX packet rate, and this means that some interrupts have been coalesced by the NAPI.
 This is possible even with a single VCPU, differently from what happens int the TX case, because (see section \ref{sec:e1000rxemu})
-the hardware emulation (backedn and frontend) is done by the IOThread, while the guest is executed by a VCPU thread. Parallelism is 
+the hardware emulation (backend and frontend) is done by the IOThread, while the guest is executed by a VCPU thread. Parallelism is 
 therefore possible, because the IOThread could insert a new frame in the RX ring while the NAPI is polling, and/or the interrupt could
 be delayed because the interrupts are disabled.
 
@@ -230,24 +257,27 @@ frames handled by the execution of the polling function.}
 \label{tab:e1000-rx-napi-dist}
 \end{table}
 
+\vspace{0.5cm}
+
 Why is the NAPI working so bad? The problem here isn't related to lack of parallelism, like in the TX case, but is due to the guest being
 too fast. In fact, we can observe that in this experiment the overall system is composed of a \emph{producer} thread, e.g. the IOTHread,
-and a \emph{consumer} thread, e.g. the VCPU thread. The producer is basically an infinite loop that on each iteration gets a frame from the
-TAP, inserts it in the RX ring and raises an interrupt if enabled. The consumer is woken up by an interrupt and schedules the NAPI context.
+and a \emph{consumer} thread, e.g. the VCPU thread. The producer is basically an infinite loop that in each iteration gets a frame from the
+TAP (waiting/sleeping if no frames are ready to be read),
+inserts it in the RX ring and raises an interrupt if enabled. The consumer is woken up by an interrupt and schedules the NAPI context.
 The NAPI polling functions is a loop that on each iteration extracts an RX frame from the ring and push it to the stack, until there is no
 work left.
 
 If the consumer iteration is on average slower than the producer iteration, the latter is very likely to find the interrupts disabled
-after inserting a new RX frame, and the producer is very likely to see the new frame while is executing the polling function corresponding
+after inserting a new RX frame, and the consumer is very likely to see the new frame while is executing the polling function corresponding
 to a previous interrupt. In this scenario the consumer will (almost) always find work to do, and so the interrupt will (almost) always
 be disabled, and consequently the NAPI mitigation will work.
 
 On the other hand, if the consumer iteration is on average faster than the producer iteration, the latter is very likely to find the
 interrupt enabled after inserting a new RX frame, and so an interrupt is raised for each received frame. This is exactly what happens
 in our experiment. It's important to point out that when there is no more work to do, the NAPI polling function is forced to complete 
-and reenable the interrupts, because we don't know when the next RX frame is going to come.
+and enable the interrupts, because it doesn't know when the next RX frame is going to come.
 
-It's important to obeser that in this experiment the consumer is very slow simply because we have forced the UDP sender to send to a 
+Observe that in this experiment the consumer is very slow simply because we have forced the UDP sender to send to a 
 constant packet rate of 14 Kpps, which makes it slow by definition. We cannot go beyond 14Kpps because of the livelock.
 
 \vspace{0.5cm}
@@ -289,7 +319,7 @@ On average we serve about 27 RX frames per interrupt, so that the high interrupt
 
 The RX notification rate is about twice as the interrupt rate, because when the polling function handles more frames, it gives new memory
 buffers to the hardware doing a write to the RDT register every 16 frames handled (see section \ref{sec:rxdriver}) and a write at the end
-of the polling function. Since on average 27 frames are served, we have 2 RDT writes.
+of the polling function. Since on average 27 frames are served, we have on average $\lfloor \frac{27}{16} \rfloor + 1 = 2$ RDT writes.
 
 
 \subsubsection{Discussion}
@@ -298,11 +328,11 @@ there is a RX notification for each frame to send. The interrupt moderation here
 (because of the livelock).
 
 In the 2-VCPU case the mitigation can still be useful to remove the existing fluctuations in the interrupt rate which cause performance
-drops, and in general the system to be more stable. In our experiment, in fact, we noted that the performance drops when the interrupt
-rate has a peak (~10 KHz).
+drops, and in general would be useful for the system to be more stable. In our experiment, in fact, we noted that the performance drops
+when the interrupt rate has a peak (~10 KHz).
 
-The second problem has minor negative effects on performance in the 2-VPCU case, because at least an RX notification is done every
-16 frames.
+The second problem has minor negative effects on performance in the 2-VPCU case, because an RX notification is done every
+16 frames, so the associated cost is amortized.
 
 \vspace{0.5cm}
 
@@ -314,29 +344,30 @@ We've not discussed the performances with bigger packet sizes, for the same reas
 \label{sec:e1000-mit}
 In section \ref{sec:e1000txperf} we have seen that we can improve both the RX and TX packet rate if we emulate the e1000 mitigation.
 A precise emulation is not necessary nor possible, and it's therefore convenient to choose a simple and efficient one.
-In this work we decide to implement the ITR register, the TADV register and the RADV register.
-We are not interested in the TIDV and RDTR register\footnote{However, the RDTR register has been added to the frontend only to 
+In this work we have implemented the ITR register, the TADV register and the RADV register.
+We are not interested in the TIDV and RDTR registers\footnote{However, the RDTR register has been added to the frontend only to 
 validate the RADV content. The e1000 speicification, in fact, says that the TADV register is not valid if RDTR contains 0.}.
 
 \vspace{0.5cm}
 
-In our implementation we use a single QEMUTimer (see section \ref{sec:qemuel}, even if the hardware has multiple timers, so we have to 
-aggregate the meaning o the ITR, TADV and RADV registers.
+In our implementation we use a single QEMUTimer (see section \ref{sec:qemuel}), even if the hardware has multiple timers, and so we have to 
+aggregate the meanings and functionalities of the ITR, TADV and RADV registers.
 We therefore consider the moderation delay to be the minimum delay among the ones specified through the ITR, TADV and RADV registers.
-When computing the minimum, each register is considered only if the content is valid and if there is a proper event type pending.
-According to the e1000 specification a zero value means that the register content is not valid. If there is no pending TX event
-the TADV content is not considered, while if there is no pending RX event the RADV register is not considered.
+When computing the minimum, each register is considered only if its content is valid and if there is a pending event of the proper type.
+According to the e1000 specification (\cite{ref:e1000}), a zero value means that the register content is not valid. If there is no pending 
+TX event the TADV content is not considered, while if there is no pending RX event the RADV register is not considered.
 
-Moreover, only the interrupts due to transmission (\texttt{start\_xmit} function) and reception (\texttt{e1000\_receive}
+Moreover, only the interrupts due to transmission (\texttt{start\_xmit()} function) and reception (\texttt{e1000\_receive()}
 function) are considered. The other interrupts are extremely rare, so they are not intersting.
 
 
 \vspace{0.5cm}
-Let's see how moderation is implemented. We have modified the code so that the frontend calls the \texttt{mit\_set\_ics} function instead
-of the \texttt{set\_ics} function when it wantsto issue an interrupt.
-The first time is called, the \texttt{mit\_set\_ics} arms the moderation timer (\texttt{mit\_timer}) with the moderation delay and issues 
+Let's see how moderation is implemented. We have modified the code so that the frontend calls the \texttt{mit\_set\_ics()} function instead
+of the \texttt{set\_ics()} function when it wants to issue an interrupt.
+When called with the moderation timer (\texttt{mit\_timer}) inactive, the \texttt{mit\_set\_ics()} arms the timer with the moderation delay
+and issues  an interrupt.
+When called with the moderation timer active (e.g. the timer has not expired yet), it only accumulates the interrupt cause, but don't issue 
 an interrupt.
-When the function is called again, if the timer has not expired yet, it only accumulates the interrupt cause, but don't issue an interrupt.
 When the timer expires, an interrupt is sent, and the timer is rearmed only if there is a pending accumulated interrupt cause and
 the moderation delay is not zero.
 Every time the timer is (re)armed the moderation delay is computed again, because the mitigation registers content can change, and
@@ -406,7 +437,7 @@ In order to understand the mitigation effects on performances, we have tried dif
 rate on a very long time window (some minutes). The results are shown in figure \ref{fig:itr-vs-txrate}.
 From this plot we can see that the lower the MAIR is, the higher the TX packet rate is. However we cannot set MAIR to a value too low,
 because this would increment the latency too much. In fact while the moderation timer is on, we don't let the emulated hardware raise
-any interrupt, and so the responsivity is limited by the moderation delay, namely by the ITR.
+any interrupt, and so the responsiveness is limited by the moderation delay, namely by the ITR.
 As stated previously, in this study we want to maximize the packet rate, and we are not interested in minimizing the latency.
 
 \begin{figure}[bt]
@@ -439,7 +470,7 @@ The measured results in the 2-VCPU case are shown in table \ref{tab:e1000-mit-tx
 
 The results are similar to the 1-VCPU case, because the incremented parallelism is not exploited. Even if there is parallelism
 between the interrupt routine and the transmission path, the TX clean work is not very expensive. Therefore we don't benefit from a second 
-VCPU, or the little benefits are compensated by the overhead involved in the SMP management (e.g. locks).
+VCPU, or the little benefits are compensated by the overhead involved in the SMP management (e.g. locks and barriers).
 
 
 \subsection{RX performance}
@@ -468,7 +499,7 @@ over about 35 frames. Since the interrupt rate is lower, also the RX notificatio
 $\lfloor \frac{35}{16} \rfloor + 1 = 3$ RDT writes for each interrupt (see section \ref{sec:rxdriver}), and so a notification rate of 
 about $3 \cdot 3.838$ KHz = 11.514 KHz, which is similar to the measured one (10.332 KHz).
 
-If we increase the incoming RX rate, the performance of the UDP receiver gradually degrades, but we don't incur in a complete livelock 
+If we increase the incoming RX rate, the performance of the UDP receiver gradually degrades, but we don't run into a complete livelock 
 (like the livelock we have seen in section \ref{sec:e1000-rx-g2h1vcpu}), because the interrupt rate is bounded.
 
 \vspace{0.5cm}
@@ -491,7 +522,7 @@ Moreover, we cannot choose the MAIR to be too low because of the latency (see se
 
 \vspace{0.5cm}
 
-The 2-VCPU case results (MAIR = 4 KHz, incoming RX rate = 240 Kpps) are shown in table \ref{tab:e1000-mit-rx-g2h2vcpu}
+The 2-VCPU case results (MAIR = 4 KHz) are shown in table \ref{tab:e1000-mit-rx-g2h2vcpu}
 
 \begin{table}
 \begin{center}
@@ -545,27 +576,27 @@ In order to get to a zero-configuration and simple implementation we have adopte
 \vspace{0.5cm}
 
 The idea is to use the interrupt itself as a timer mechanism, and thus the interrupt routine as a timer callback.
-We use a variable, \texttt{bat\_pending}, which is set to 1 to indicate that there is a pending interrupt that will come soon, and is set 
-to 0 when there is not a pending interrupt. The variable is initialized to 0.
-When the \texttt{ndo\_xmit\_method} is called for the first time, \texttt{bat\_pending} is 0 and so the notification is done and 
+We use a variable, \texttt{bat\_pending}, which is 1 to indicate that there is a pending interrupt that will come soon, and is
+0 when there is not a pending interrupt. The variable is initialized to 0.
+When the \texttt{ndo\_xmit\_method} is called for the first time, \texttt{bat\_pending} is 0: The notification is done and 
 \texttt{bat\_pending} is set to 1.
 If the \texttt{ndo\_xmit\_method} is called again before the TX interrupt (due to the previous notification) comes, \texttt{bat\_pending}
-is 1 and so we don't notify.
+is 1: In this case we don't notify, and consequently that transmission become pending.
 When the interrupt comes, at the begin of the NAPI polling function (the interrupt are disabled), if there are pending transmissions we do 
 a notification, but we don't set \texttt{bat\_pending} to 0, because the notification we have done will cause another interrupt.
 If there are no pending notifications we set \texttt{bat\_pending} to 0, because we don't know when the next interrupt is going to be, and
-so we don't want to miss the next notification.
+so we want the next transmission to cause a TX notification.
 
 Note that this algorithm works well only if there is time for the guest to call the \texttt{ndo\_xmit\_method} before the an interrupt
 comes. For instance, this can happen if interrupt moderation is implemented, since TX interrupts are delayed.
 
 \vspace{0.5cm}
 
-The proposed patch includes a few other implementation details that are not very interesting. for instance, we have to hold a spinlock
-while writing to the tdt register and updating the other variables related to the batching mechanism, because we perform this write
-accesses both in the \texttt{ndo\_start\_xmit} method and in the napi polling function, and so we need mutual exclusion.
-in addition to that, when we have to chek if there are pending transmissions, we should read from the TDT register, but this would be 
-counter-productive,and so we mantain a shadow variable (\texttt{bat\_software\_tdt}) that is always coherent with the tdt content.
+The proposed patch includes a few other implementation details that are not very interesting. For instance, we have to hold a spinlock
+while writing to the TDT register and updating the other variables related to the batching mechanism, because we perform this write
+accesses both in the \texttt{ndo\_start\_xmit} method and in the NAPI polling function, and so we need mutual exclusion.
+In addition to that, when we have to check if there are pending transmissions, we should read from the TDT register, but this would be 
+counter-productive. Therefore we mantain a shadow variable (\texttt{bat\_software\_tdt}) that is always synchronized with the TDT content.
 Finally, when writing to the TDT register from the interrupt routine we cannot read from \texttt{tx\_next\_to\_use}, since its value
 is modified without the spinlock held. The \texttt{bat\_shadow\_ntu} is used to take coherent snapshots of the \texttt{tx\_next\_to\_use}
 variable.
@@ -575,7 +606,7 @@ The user can enable or disable the batching mechanism writing 0 or 1 to the \tex
 
 \subsection{Improvement analysis}
 \label{sec:e1000-mit-bat-tx}
-In section we will repeat the same experiments presented in section \ref{sec:e1000-mit-tx} in order to see the improvements
+In this section we will repeat the same experiments presented in section \ref{sec:e1000-mit-tx} in order to see the improvements
 obtained with the the batching patch and the moderation patch. The Linux e1000 module has been loaded specifying the same parameters 
 plus the \texttt{batching} parameter, which has been set to 1.
 
@@ -600,43 +631,45 @@ The results in the 1-VCPU case is shown in table \ref{tab:e1000-mit-bat-tx-g2h1v
 \end{table}
 
 As we can see there is a big improvement in the TX rate with respect to the previous solutions (existing implementation with or without
-the moderation patch), because now we have only one TX notification for each interrupt. At this point we have mitigated
+the moderation patch), because now we have only one TX notification for each interrupt. At this point we have moderated
 both interrupts and TX notifications and there is nothing else to mitigate.
 However, the TX path still does not work at his best, because the TX emulation is still demanded to the VCPU thread that executes a
 TX notification (section \ref{sec:e1000txemu}). In other words, the processing is synchronous, while in the RX path the emulation can 
 go parallel with the guest.
 
+\vspace{0.5cm}
+
 The TDT write batching algorithm would be intended to process, for each notification, a batch of frame. Unfortunately, this is not
 exactly true, because of the following factors:
 \begin{enumerate}
     \item The TX processing is synchronous, while it would be better doing it in the IOThread.
-    \item The TX processing holds the \texttt{iothread\_lock}, preventing other VCPUs to execute emulation code while the lock is held.
-    \item The TX processing always processes all the TX descriptors it has.
+    \item The TX processing holds the \texttt{iothread lock}, preventing other VCPUs to execute emulation code while the lock is held.
+    \item The TX processing always processes all the TX pending descriptors.
     \item The moderation timer works with the host time, so it does not stop running down when a VCPU is not executing guest code, but
 	  it is executing emulation code. Therefore a 1-VCPU guest can see a moderation delay which is shorter that expected or even
 	  close to zero.
 \end{enumerate}
 
 For these reasons, even though the UDP sender never stops sending, the sequence of batch lengths oscillates, expecially in the 1-VCPU case.
-In the latter case, the sequence of batch notifications alternates batches of length 1 and very big batches (~200 frames), in a very 
-regular manner. The following batch lengths sequence has been extracted by the emulator while executing with the batching enabled
+In the latter case, the sequence of batch notifications alternates batches of length 1 and very big batches (about 200 frames), in a very 
+regular manner. The following batch lengths sequence has been extracted by the emulator while executing with the batching enabled:
 \begin{center}
 ... 1, 185, 1, 195, 1, 169, 1, 221, 1, 212, 1, 198, 1, 210, 1, 200, 1, 215, 1, 211, 1 ...
 \end{center}
 
 Let's see what happens in more detail. The first time the guest wants to send, the notification is done, \texttt{bat\_pending} is set to 1,
-the TX is emulated an interrupt issued and the moderation timer is armed. When executing the NAPI polling function, there are no 
+the TX is emulated, an interrupt issued and the moderation timer is armed. When executing the NAPI polling function, there are no 
 pending frames, because the guest has not had time to do anything after the notification, and so \texttt{bat\_pending} is set to 0.
 Here the cycle starts.
 
 Now the guest wants to send another frame, the notification is done, \texttt{bat\_pending} is set to 1, the TX is emulated but no
-interrupt is issued, because the moderation timer is active. Now the guest will continue sending other frames, but this time it will
+interrupt is issued, because the moderation timer is active. The guest will continue to send other frames, but this time it will
 find \texttt{bat\_pending} set to 1 for a while, and can therefore insert many new TX frames in the TX ring without doing any notification.
-When the moderation timer expires, an interrupt is issued. When executing the polling function there are a lot of pending frames, and
-so a notification is done in the interrupt routine and \texttt{bat\_pending} is not set to 0. Since there is a lot of TX emulation 
-processing,
-and the moderation timer keep running down, when the processing is finished the timer is very likely to expire, and so an interrupt is
-issued and the timer rearmed. Consequently, when the VCPU enters the guest again (because the processing is done), it has another 
+When the moderation timer expires, an interrupt is issued and the timer rearmed. This time the polling function finds a lot of pending 
+frames, and so a notification is done and \texttt{bat\_pending} is not set to 0. Since there is a lot of TX emulation processing to do,
+and the moderation timer keep running down, when the processing is finished the timer is very likely to be expired: Therefore an interrupt
+is issued and the timer is not rearmed, because no events have come in the while. Consequently, when the VCPU enters the guest again
+(because the processing is done), it has another
 interrupt\footnote{Here we can see that, from the guest's point of view, the new interrupt has come immediatly after the previous one.} 
 to process with no pending TX frames, and so \texttt{bat\_pending} is set to 0. Here the whole thing starts again.
 
@@ -672,14 +705,14 @@ regular oscillation. The following sequence has been exctracted while running th
 \end{center}
 We can also observe the interrupt rate is higher w.r.t. the 1-VCPU case. The higher interrupt rate can be explained because the batches
 are shorter. Shorter batches means that the \texttt{start\_xmit} is shorter on average, and so the QEMU event-loop is more responsive,
-having more chances to issue an interrupt, either in timer callback or at the end of the \texttt{start\_xmit} itself. Therefore an
+having more chances to issue an interrupt, either in the timer callback or at the end of the \texttt{start\_xmit} itself. Therefore an
 interrupt is less likely to be delayed more than the moderation delay because of a long TX processing.
 To close the cycle, since interrupt rate is higher, the guest has less time to replenish the TX ring, and so the batches are shorter.
 
 \vspace{0.5cm}
 
-In other words, with 2 VCPUs the TX path converges towards a different trend, which is incidentally less efficient. This is an anomaly,
-since with more VCPUs, and so with more computational power, we have less performance.
+In other words, with 2 VCPUs the TX path converges towards a different stable state, which is incidentally less efficient. This is an 
+anomaly, since with more VCPUs, and so with more computational power, we have less performance.
 
 
 
@@ -697,7 +730,7 @@ for each frame to send, e.g. the batching patch is useless.
 
 \vspace{0.5cm}
 
-Wit 2-VCPUs guests the situation is different, because a TX interrupt is issued only at the end of the TX emulation, e.g. when all the
+With 2-VCPUs guests the situation is different, because a TX interrupt is issued only at the end of the TX emulation, e.g. when all the
 notified TX descriptors have been processed. So with respect to the other VCPU, the TX interrupt is actually delayed.
 In more detail, the first time the guest wants to send \texttt{bat\_pending} is 0, so the latter is set to 1 and a notification is done.
 While one VCPU is doing the TX emulation or is servicing the TX interrupt, the other VCPU is able to insert more frames in the TX ring,
@@ -733,7 +766,7 @@ Here is an extracted sequence of batch lengths
 This result is interesting because the batching patch doesn't require modification to the emulator, but only to the guest device driver.
 Therefore it can be applied to other emulators that don't implement interrupt moderation.
 
-As an example, we tried to run the same test presented in this section under VirtualBox (with KVM), but using two UDP sender a the 2-VCPU
+As an example, we tried to run a similar test under VirtualBox, using two UDP senders on the 2-VCPU
 guest and a receiver on the host. In this situation the total packet rate is about 168 Kpps with the batching enabled, while if
 the batching is disabled the total packet rate is about 60 Kpps. We have not used a single UDP sender because it was not enough to trigger
 the batching mechanism. This is probably due to the different implementation of the e1000 emulation (e.g. a different thread organization).

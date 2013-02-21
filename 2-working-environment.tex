@@ -567,7 +567,8 @@ with this problem, in the very same way the TADV register does, so we won't expl
 
 \vspace{0.5cm}
 
-The figure \ref{fig:rdtrstate} shows a state diagram associated to the RDTR timer.
+Figure \ref{fig:rdtrstate} shows a state diagram associated to the RDTR timer, while figure \ref{fig:radvonly} depicts an example
+about the RADV moderation mechanism.
 
 \begin{figure}[bt]
 \centering
@@ -576,22 +577,12 @@ The figure \ref{fig:rdtrstate} shows a state diagram associated to the RDTR time
 \label{fig:rdtrstate}
 \end{figure}
 
-The figures \ref{fig:radvonly} and \ref{fig:rdtrradv} depict some examples about the RDTR and RADV moderation mechanism.
-
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{radv-only.png}
 \caption{RX moderation example that makes use of the RADV timer.}
 \label{fig:radvonly}
 \end{figure}
-
-\begin{figure}[bt]
-\centering
-\includegraphics[scale = 0.45]{rdtr-radv.png}
-\caption{RX moderation example that makes use of both RADV and RDTR timers.}
-\label{fig:rdtrradv}
-\end{figure}
-
 
 \subsubsection{The newer moderation mechanism}
 \label{sec:itrmit}

@@ -1,7 +1,7 @@
-\documentclass[a4paper,11pt,oneside]{book}
+\documentclass[a4paper,11pt,oneside]{report}
 
 \author{Vincenzo Maffione}
-\title{Optimization in Virtual Machine Networking}
+\title{Optimizations in Virtual Machine Networking}
 \date{\today}
 
 %\usepackage{syntonly}
@@ -15,7 +15,7 @@
 \usepackage{txfonts}
 
 \hyphenation{pro-prie-tà in-di-vi-duo re-le-ga-re mo-del-lo mo-del-li o-pe-ra-zio-ni o-pe-ra-to-ri mo-du-lo ri-ve-la-to per-met-te-re rap-pre-sen-ta-zio-ne mo-del-liz-za-zio-ne ge-ne-ra-to o-biet-ti-vo li-ne-a-re no-no-stan-te po-si-ti-va e-la-bo-ra-zio-ne o-pe-ra-ti-vo sca-la-bi-li-tà i-ni-zia-liz-za-re in-di-vi-duo o-pe-ra-to-re va-lo-ri i-te-ra-zio-ni in-va-li-da-re pe-ri-fe-ri-che re-gi-stri ma-na-ge-ment e-si-ste pra-ti-ca va-ria-bi-li in-di-riz-zo o-pe-ra-zio-ne me-dian-te in-di-vi-duo sem-pli-ci-tà co-lo-ri ha-mil-to-nia-no que-sta in-clu-de-re ge-ne-tic}
-
+\hyphenation{ne-ces-sa-ry}
 
 \usepackage[english]{babel}
 
@@ -29,12 +29,12 @@
 
 
 % definizione dell'ambiente "abstract", per aggiungere il sommario
-\usepackage{fancyhdr}
-\newcommand{\fncyblank}{\fancyhf{}}
-\newenvironment{abstract}%
-{\cleardoublepage\fncyblank\null\vfill\begin{center}%
-\bfseries\abstractname\end{center}}%
-{\vfill\null}
+%\usepackage{fancyhdr}
+%\newcommand{\fncyblank}{\fancyhf{}}
+%\newenvironment{abstract}%
+%{\cleardoublepage\fncyblank\null\vfill\begin{center}%
+%\bfseries\abstractname\end{center}}%
+%{\vfill\null}
 
 \usepackage{graphicx}
 
@@ -54,7 +54,7 @@
 
 \newpage\null\thispagestyle{empty}\newpage		%pagina bianca
 
-\frontmatter					%Attiva numerazione romana perche' sei nell'intro
+%\frontmatter					%Attiva numerazione romana perche' sei nell'intro
 
 
 \begin{abstract}
@@ -87,7 +87,7 @@ paravirtualized solutions.
 \tableofcontents
 %\listoffigures
 
-\mainmatter					%Disattiva numerazione romana
+%\mainmatter					%Disattiva numerazione romana
 
 
 \input{1-introduction}
