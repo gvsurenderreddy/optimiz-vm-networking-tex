@@ -1,5 +1,5 @@
 \documentclass{beamer}
-\usetheme{JLTree}
+%\usetheme{JLTree}
 
 \usepackage{graphicx}
 \usepackage[english]{babel}
@@ -67,7 +67,7 @@
   \begin{block}{Goals}
     \begin{itemize}
       \item Analyze the state of the art in Virtual Machines networking, when hardware based virtualization is employed
-      \item Implement optimizations aimed at improving the Rx/Tx packet rate when a virtual \emph{e1000} network adapter is used in a VM
+      \item Implement optimizations aimed at improving the Rx/Tx packet rate when a virtual e1000 network adapter is used in a Virtual Machine
     \end{itemize}
 
   \end{block}
@@ -154,7 +154,7 @@
   \only<6> {
   \begin{block}{CPU Virtualization techniques}
     \begin{itemize}
-      \item Interpretation: Doing in software what CPU does in hardware
+      \item Interpretation: Doing in software what a CPU does in hardware
       \item Binary translation: Translating the guest code in equivalent host code \emph{on the fly}
       \item Hardware assisted CPU virtualization: Using processor extensions such as Intel VT-x or AMD-v
     \end{itemize}
@@ -361,7 +361,7 @@
   }
 
   \only<3> {
-    \begin{block}{What are the problems \& bottlenecks?}
+    \begin{block}{What are the problems and bottlenecks?}
       \begin{itemize}
 	\item Interrupt mitigation is not emulated, although present in the real hardware $\rightarrow$ We get an interrupt for each
 	      TX or RX packet
@@ -426,6 +426,7 @@
       \begin{itemize}
 	\item The e1000 driver coalesces TX notifications
 	\item This is done without using expensive kernel timers
+	\item We don't notify if there is a pending TX interrupt
 	\item We use the e1000 interrupt routine to flush pending TX frames
 	\item The patch is only 35 lines of code
       \end{itemize}
@@ -460,7 +461,7 @@
       \begin{itemize}
 	\item So far we have assumed that the guest OS is completely unaware of being run in a Virtual Machine environment
 	\item This type of virtualization is called \emph{Full virtualization}
-	\item Advantage: The hypervisor can then support an unmodified OS
+	\item Advantage: The hypervisor can support an unmodified OS
 	\item Disadvantage: Hypervisor implementation is generally complicated and inefficient
       \end{itemize}
     \end{block}
@@ -515,7 +516,7 @@
 	\item e1000 index registers exported to a shared memory area (\emph{Communication Status Block})
 	\item Added flags to enable/disable TX/RX notifications
 	\item Two Producer/consumer couples (PCCs) for the TX path and two PCCs for the RX path
-	\item Consumer work is done asynchronously w.r.t. the consumer and with notifications disabled
+	\item Consumer work is done asynchronously w.r.t. the producer and with notifications disabled
 	\item The producer notifies the consumer only when the consumer stops
 	\item If the consumer is faster notification moderation is required
       \end{itemize}
@@ -549,7 +550,7 @@
   }
     
   \only<4> {
-    \begin{block}{RX statistics improvements w.r.t moderation patch statistics}
+    \begin{block}{RX statistics improvements w.r.t. moderation patch statistics}
       \begin{center}
       \begin{tabular}{lrcrl}
 	\textbf{Interrupt rate} & 3.838 & $\rightarrow$ & 3.774 & KHz\\
@@ -570,14 +571,34 @@
 %=================================================================
 \begin{frame}
 \frametitle{Conclusions}
-  \begin{block}
+  \begin{block}{}
     \begin{itemize}
-      \item Some simple modifications to the e1000 framework leads to big performance improvements
-      \item 
+      \item Some simple modifications to the e1000 framework lead to big performance improvements
+      \item TX path: $8.9\times$ speed-up
+      \item RX path: $22\times$ speed-up
+      \item Collecting the idea presented in this work, in combination with the VALE fast switch, we have submitted a short paper
+	    to USENIX ATC'13
+    \end{itemize}
+  \end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Future works}
+  \begin{block}{More can be done to optimize e1000 performance in VM systems}
+    \begin{itemize}
+      \item Remove redundant packet copies in the TX path
+      \item Euristics to improve latency, byassing interrupt moderation
+      \item Use emulated MSI/MSI-X interrupts
+      \item Explore TSO/GSO to improve TCP throughput
     \end{itemize}
   \end{block}
 \end{frame}
 
 
+\begin{frame}
+\begin{center}
+{\Large The end}
+\end{center}
 
+\end{frame}
 \end{document}
