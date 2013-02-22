@@ -1,6 +1,6 @@
 \chapter{A paravirtualized e1000 adapter}
 \label{cha:paravirt}
-In chapter \ref{cha:e1000-opt} we have proposed two simple patches that boost the e1000 performances.
+In chapter \ref{cha:e1000-opt} we have proposed two simple patches that boost the e1000 performance.
 The moderation patch involves only modification to the hypervisor, while the batching patch involves only modification to the
 guest device driver. These patches can be applied independently on each other, although batching generally works better if
 used together with moderation.
@@ -18,7 +18,7 @@ driver (e.g. a Windows e1000 driver). Whatever combination we make, it will work
 
 Another approach that sometimes is used is \emph{paravirtualization}, a general concept that describes situations in which the 
 guest is aware of being in a Virtual Machine environment, and cooperates with the hypervisor in order to make the virtualization simpler
-and/or to get better performances.
+and/or to get better performance.
 
 
 \section{Device paravirtualization}
@@ -36,7 +36,7 @@ a new QEMU frontend.
 
 \vspace{0.5cm}
 
-How can paravirtualization improve performances? Device hardware specifications are generally very complex, and often
+How can paravirtualization improve performance? Device hardware specifications are generally very complex, and often
 inlcude a lot of physical details, offloading capabilities and other hardware related features. When emulating the device, most of these 
 details and features are just useless, or is not worth/possible implementing it. Moreover, the devices communicate with the OS mainly 
 through register accesses because register accesses are not expensive in hardware, but they do are expensive within emulators, since
@@ -68,7 +68,7 @@ the driver.
 
 
 \section{The Virtio standard}
-Virtio (\cite{ref:virtio}) is a virtualization standard that aims at high I/O performances through device paravirtualization. This is done
+Virtio (\cite{ref:virtio}) is a virtualization standard that aims at high I/O performance through device paravirtualization. This is done
 creating a completely new set of device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
 similar to the Xen I/O paravirtualization and the VMware \emph{Guest Tools}.
 Virtio is an effort to estabilish a standard interface between drivers and hypervisors for paravirtualized I/O, in order to increase the 
@@ -158,7 +158,7 @@ The callback function can call the \texttt{get\_buf} so that it can process the 
 
 \vspace{0.5cm}
 
-In a similar way, the hypervisor can enable/disable guest notifications (kicks)\footnote{e.g. In our working environment this are
+In a similar way, the hypervisor can enable/disable guest notifications (kicks)\footnote{e.g. In our work environment this are
 implemented as guest MMIO accesses.}, since also this notifications are very expensive. When guest notifications are disabled,
 the \texttt{kick} method has no effect.
 
@@ -225,8 +225,8 @@ to get an used buffer, it invokes the \texttt{get\_buf} method so that it can cl
 \subsection{Minimizing notifications using Virtio}
 \label{sec:virtiomin}
 Let's see how we can build an Virtio driver and device emulator that try to minimize the notification rate in both directions, assuming we
-are dealing with our usual working environment (QEMUKVM as VMM and Linux as guest).
-As we've seen so far, in our working environment notifications are very expensive, and so minimizing them leads to big performance
+are dealing with our usual work environment (QEMUKVM as VMM and Linux as guest).
+As we've seen so far, in our work environment notifications are very expensive, and so minimizing them leads to big performance
 improvements. Since Virtio is explicitely designed to work in a virtualized environment, it's easy to write a driver that minimizes
 notifications.
 We will make an abstract example where the virtio driver, using a single virtual queue, receives requests from the kernel and passes
@@ -274,7 +274,7 @@ This concept is employed for both the PCCs. To be precise, after the notificatio
 checks again if there is other work to do. If true the notifications are disabled and the consumer reschedules itself. This is done because
 of a race condition that we will show in the following ``Race condition analysis'' subsection.
 Using this system, if the consumer is slower than the producer (see the discussion repoted in section \ref{sec:e1000-rx-g2h1vcpu}), the 
-performances of the consumer/producer are very good.
+performance of the consumer/producer are very good.
 
 \vspace{0.5cm}
 
@@ -293,7 +293,7 @@ NAPI polling function is scheduled. The polling worker starts to post-process re
 As we can see, this system can, in theory, work without notifications, except for the first two ones. Of course this is not realistic, also
 because a consumer could be faster than a producer. For instance, the guest consumer (NAPI polling function) is often a fast one, and
 so the NAPI could not moderate adequately the host notifications. In this situation, some other form of moderation is necessary to get
-good performances.
+good performance.
 
 Moreover, the \texttt{request()} function could implement some form of stream control and tell the kernel to stop sending requests when it
 sees that the avail ring is full. If requests stop, also the two consumers stop and notification must be enabled, otherwise we couldn't
@@ -323,7 +323,7 @@ In our example we've skipped many details in order to keep the pseudocode simple
 polling function and the QEMUBH, in their working cycle, must limit the amount of work done, otherwise they would monopolize the VCPU
 thread (in the NAPI case) or the IOThread (in the QEMUBH case). For these reason the workers must count the requests processed and
 exit the working cycle when the count exceeds a given amount. In the NAPI case, this amount is passed to the polling function in the
-\texttt{budget} argument, whereas in the QEMUBH case we have to choose a value (e.g. 256 is a good compromise between performances and
+\texttt{budget} argument, whereas in the QEMUBH case we have to choose a value (e.g. 256 is a good compromise between performance and
 responsiveness of the event-loop).
 
 
@@ -499,7 +499,7 @@ enter in a permanent \emph{almost-full} state:
   \item As soon as the hypervisor processes the next TX packet (making room in the queue), it notifies the guest. The cycle go on from
 	point 1.
 \end{enumerate}
-In this situation we should have nearly one interrupt per packet, and so bad performances. However, from table 
+In this situation we should have nearly one interrupt per packet, and so bad performance. However, from table 
 \ref{tab:virtionet-tx-g2h1vcpu} we don't see this circumstance because of the way the interrupts are enabled. As we have seen in 
 section \ref{sec:virtionet-tx}, the \texttt{enable\_cb\_delayed} method is used in place of \texttt{enable\_cb}. In this way the interrupts
 are enabled after a while, and not immediately. In the current implementation, the interrupt are enabled when the hypervisor has processed
@@ -637,7 +637,7 @@ the 1-VCPU case, because there is not enough parallelism in the guest to exploit
 
 
 \section{Porting paravirtualization to e1000}
-In the previous sections we've seen how is possible to get good performances using a paravirtualized I/O solution. Virtio drivers are
+In the previous sections we've seen how is possible to get good performance using a paravirtualized I/O solution. Virtio drivers are
 efficient because the only make use MMIO accesses and interrupts to notify the other peer of a virtual queue, and exchange data and
 metadata through shared memory.
 However, the Virtio interface must also be general enough to support different kind of devices and is not specifically tailored to the
@@ -827,7 +827,7 @@ The results for 1-VCPU case are shown in table \ref{tab:e1000-par-tx-g2h1vcpu}.
 \label{tab:e1000-par-tx-g2h1vcpu}
 \end{table}
 
-As we can see, performances are better with reference to the previous tests (both e1000 and Virtio). The interrupt rate is very low,
+As we can see, performance are better with reference to the previous tests (both e1000 and Virtio). The interrupt rate is very low,
 thanks to mitigation and NAPI. The TX notification are minimized because of the usual NAPI-like scheme.
 Note that the total MMIO access rate is 1.611, which is about 4.35 times the interrupt rate: 3 MMIO accesses per interrupt are due
 to the ICR read and IMC and IMS write, while 1.35 access per iterrupt are due to the TX notifications.

@@ -1,16 +1,16 @@
-\chapter*{Conclusion and future work}
+\chapter{Conclusions and future work}
 In this work we have shown how is possible to boost the packet-rate performance of an e1000 network adapter in a Virtual
 Machine environment.
 First of all we analyzed the existing implementation and we pointed out its problems and bottlenecks.
 Then we proposed a patch to the QEMU e1000 frontend (the \emph{moderation} patch) and a patch to the Linux e1000 driver (the \emph{batching}
-patch) that can be used, independently on each other, to improve performances. Both patches are very simple and don't extend the e1000
+patch) that can be used, independently on each other, to improve performance. Both patches are very simple and don't extend the e1000
 interface specification.
 After that we analyzed the Virtio I/O paravirtualization framework and provided a small extension to the e1000 interface that allows to remove
 some inefficiency by porting the I/O paravirtualization concepts to the e1000 platform.
 
 \vspace{0.5cm}
 
-Comparing the TX and RX performances of the existing e1000 implementation with our best results (e1000 paravirtualization) we have obtained
+Comparing the TX and RX performance of the existing e1000 implementation with our best results (e1000 paravirtualization) we have obtained
 a $8.9 \times$ speed-up on the TX path and a $22 \times$ speed-up on the RX side.
 This packet rate performance is comparable or superior to the Virtio performance and is obtained with small modification to the e1000
 driver and device emulator.

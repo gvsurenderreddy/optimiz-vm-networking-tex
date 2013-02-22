@@ -47,7 +47,7 @@ All the measurements have been done on a laptop machine with an i5-2450M process
 In this experiment a VM runs an UDP sender that sends UDP packets to an UDP receiver that runs on the host. The sender is just an 
 infinite loop where each iteration invokes the \texttt{send} system call. The buffer passed to the system call is always the same and its
 length is such that a minimum size ethernet frame (60 bytes) is sent on the wire for each \texttt{send}.
-With this test we push to the limit the TX performances in the short packet case.
+With this test we push to the limit the TX performance in the short packet case.
 
 
 \subsubsection{1 VCPU test}
@@ -99,7 +99,7 @@ has only a VCPU, the VCPU must be used to handle the interrupt, and cannot be us
 the \texttt{ndo\_start\_xmit} method). Consequently, the NAPI polling function will only clean the TX descriptor(s) associated to the
 frame that has just been sent.
 In conclusion, if we write to the TDT register every time the \texttt{ndo\_start\_xmit} method is invoked, we are doomed to receive
-an interrupt for each frame we send, and so to have low performances.
+an interrupt for each frame we send, and so to have low performance.
 
 
 \subsubsection{2 VCPUs test}
@@ -146,7 +146,7 @@ a second optimization we can implement.
 
 \vspace{0.5cm}
 
-We've not discussed the performances with bigger packet sizes, because the problems involved are exactly the same. When the packets are 
+We've not discussed the performance with bigger packet sizes, because the problems involved are exactly the same. When the packets are 
 big there is more work to do because the packet copies are more expensive, and so the performance are lower. However,
 the optimization are very effective also for the big packet case, because the overhead due to the copies is significantly lower than
 the overheads due to TX notifications and interrupts.
@@ -158,7 +158,7 @@ In this experiment a VM runs an UDP receiver that receives UDP packets from an U
 infinite loop where each iteration invokes the \texttt{recvmsg} system call. No processing is made on the received packet.
 The UDP sender is similar to the sender used in section \ref{sec:e1000txperf}, but after each \texttt{send} system call the process
 does some busy waiting in order to send UDP packets at a given rate.
-With this test we push to the limit the guest RX performances in the short packet case.
+With this test we push to the limit the guest RX performance in the short packet case.
 
 \vspace{0.5cm}
 
@@ -186,7 +186,7 @@ Figure \ref{fig:cr} shows an example of the function we are talking about.
 \centering
 \includegraphics[scale = 0.55]{critical-rate.pdf}
 \caption{This plot is an example the RX rate measured by the UDP receiver as a function of the RX rate measured by the network adapter.
-	 The critical rate is the incoming rate for which this function has a maximum. The gray area represent the oscillation (upper and
+	 The critical rate is the incoming rate for which this function has a maximum. The gray area represents the oscillation (upper and
 	 lower bound) of the UDP-measured RX rate.}
 \label{fig:cr}
 \end{figure}
@@ -292,7 +292,7 @@ section \ref{sec:e1000-tx-g2h1vcpu}, while the sixth one correspond to the RX no
 \subsubsection{2 VCPUs test}
 The same experiment has been done assigning 2 VCPU to the guest. Here the critical rate is way higher, about 175 Kpps. Moreover,
 if the rate is passed, the system still works, even if packets start to be dropped and it becomes unstable (the dropping percentage
-varies very much between 5\% and 85\%). The performances don't drop immediately after the critical rate, like in the 1-VCPU case: The system
+varies very much between 5\% and 85\%). The performance doesn't drop immediately after the critical rate, like in the 1-VCPU case: The system
 is still usable (but not stable) if the incoming RX rate is about 300K.
 
 The measurement results are shown in the table \ref{tab:e1000-rx-g2h2vcpu} when the incoming packet rate is about 185 Kpps.
@@ -336,7 +336,7 @@ The second problem has minor negative effects on performance in the 2-VPCU case,
 
 \vspace{0.5cm}
 
-We've not discussed the performances with bigger packet sizes, for the same reasons explained in \ref{sec:e1000txperfdiscuss}.
+We've not discussed the performance with bigger packet sizes, for the same reasons explained in \ref{sec:e1000txperfdiscuss}.
 
 
 
@@ -428,12 +428,12 @@ Since the interrupts are coalesced by the interrupt moderation mechanism, the NA
 descriptors each time is called. Remember that the TX emulation is synchronous with the guest VPCU (see section\ref{sec:e1000txperf}), and
 so the NAPI software moderation it's useless by itself.
 
-Despite of the good improvements, we still have a TX notification for each frame sent, and the performances are greatly limited by this
+Despite of the good improvements, we still have a TX notification for each frame sent, and the performance is limited by this
 problem.
 
 \vspace{0.5cm}
 
-In order to understand the mitigation effects on performances, we have tried different MAIR values, computing the average TX packet 
+In order to understand the mitigation effects on performance, we have tried different MAIR values, computing the average TX packet 
 rate on a very long time window (some minutes). The results are shown in figure \ref{fig:itr-vs-txrate}.
 From this plot we can see that the lower the MAIR is, the higher the TX packet rate is. However we cannot set MAIR to a value too low,
 because this would increment the latency too much. In fact while the moderation timer is on, we don't let the emulated hardware raise
@@ -504,9 +504,9 @@ If we increase the incoming RX rate, the performance of the UDP receiver gradual
 
 \vspace{0.5cm}
 
-In order to understand the mitigation effects on performances, we have tried different MAIR values, measuring the critical rate for
+In order to understand the mitigation effects on performance, we have tried different MAIR values, measuring the critical rate for
 each value. The measurements are shown in figure \ref{fig:itr-vs-cr}.
-The plot shows that if we increase the MAIR in in the region [2 KHz, $+\infty$], the performances gradually decrease, since we are 
+The plot shows that if we increase the MAIR in in the region [2 KHz, $+\infty$], the performance gradually decreases, since we are 
 less and less restrictive on the Maximum Allowed Interrupt Rate.
 On the other end, if we decrease the MAIR below 1.5 KHz, the throughput starts to decrease, because the RX ring gets full and the guest
 is not notified in a timely manner.
@@ -553,9 +553,9 @@ the measured result (14.321 KHz).
 
 
 \section{Implementing TDT write batching}
-In section \ref{sec:e1000-mit} we have seen how RX/TX packet rate performances can be improved with a minimal patch to the
+In section \ref{sec:e1000-mit} we have seen how RX/TX packet rate performance can be improved with a minimal patch to the
 e1000 frontend that implements an interrupt moderation mechanism.
-However, the TX notification problem still exists and limits TX performances. The interrupt moderation mechanism cannot help to mitigate
+However, the TX notification problem still exists and limits TX performance. The interrupt moderation mechanism cannot help to mitigate
 this problem. For these reasons, we propose a TDT \emph{write batching} algorithm, which will be explained in the following section.
 
 
@@ -694,7 +694,7 @@ The results in the 2-VCPU case is shown in table \ref{tab:e1000-mit-bat-tx-g2h2v
 \label{tab:e1000-mit-bat-tx-g2h2vcpu}
 \end{table}
 
-As we can see, the performances are very good, but slightly inferior if compared with the 1-VCPU case.
+As we can see, the performance is very good, but slightly inferior if compared with the 1-VCPU case.
 As pointed out in the 1-VCPU analysis, when a VCPU is doing the TX emulation, the lock is held, and so the other VCPU cannot do any VMexit,
 limiting the system parallelism, because that VCPU would be blocked on the lock. However, it's not necessary to do a VMExit in order to 
 insert a new TX frame in the ring when \texttt{bat\_pending} is 1, and so the second VCPU can actually have the time to insert more
