@@ -23,14 +23,15 @@ In our experiments, we will try to give to each guest one or two VCPU, and discu
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.60]{scenario-1.pdf}
-\caption{Communication scenario in which and UDP sender on a VM communicates with and UDP receiver on the host.}
+\caption{Communication scenario in which and UDP sender on a VM sends packets to an UDP receiver on the host. The VM and the host
+	communicate through a virtual LAN made of TAP devices and an in-kernel software bridge.}
 \label{fig:scenario-1}
 \end{figure}
 
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.60]{scenario-2.pdf}
-\caption{Communication scenario in which and UDP sender on the host communicates with and UDP receiver on the VM.}
+\caption{Communication scenario in which and UDP sender on the host sends packets to an UDP receiver on the VM.}
 \label{fig:scenario-2}
 \end{figure}
 
@@ -185,7 +186,8 @@ Figure \ref{fig:cr} shows an example of the function we are talking about.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.55]{critical-rate.pdf}
-\caption{This plot is an example the RX rate measured by the UDP receiver as a function of the RX rate measured by the network adapter.
+\caption{This plot is an example of RX rate measured by the UDP receiver as a function of the RX rate measured by the network adapter
+	 (incoming rate).
 	 The critical rate is the incoming rate for which this function has a maximum. The gray area represents the oscillation (upper and
 	 lower bound) of the UDP-measured RX rate.}
 \label{fig:cr}
@@ -443,7 +445,8 @@ As stated previously, in this study we want to maximize the packet rate, and we 
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.7]{MAIR-vs-TXRate.png}
-\caption{Measured TX rate as a function of the Maximum Allowed Interrupt Rate.}
+\caption{Measured TX rate as a function of the Maximum Allowed Interrupt Rate (MAIR). As we can see, the TX rate increases as the MAIR
+	descreases. However, we cannot decrease the MAIR too much, because the latency worsens as the MAIR decreases.}
 \label{fig:itr-vs-txrate}
 \end{figure}
 
@@ -515,7 +518,9 @@ Moreover, we cannot choose the MAIR to be too low because of the latency (see se
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.7]{MAIR-vs-CR.png}
-\caption{Measured critical rate as a function of the maximum allowed Interrupt Rate.}
+\caption{Measured critical rate as a function of the maximum allowed Interrupt Rate (MAIR). If the MAIR is too high, performance worsens
+	because the interrupt rate is too high. If the MAIR is too low, performance worsens because the RX ring gets full and guest
+	is not notified immediately.}
 \label{fig:itr-vs-cr}
 \end{figure}
 

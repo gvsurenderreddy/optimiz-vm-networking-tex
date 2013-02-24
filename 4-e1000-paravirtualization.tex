@@ -79,7 +79,8 @@ supported by QEMU and Virtualbox. Linux and Windows drivers are available for Vi
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{virtio.pdf}
-\caption{A guest and its hypervisor communicate through the Virtio interface.}
+\caption{A guest and its hypervisor communicate through the Virtio interface. The Virtio backend and Virtio frontend, together, implement
+	the Virtio interface.}
 \label{fig:virtio}
 \end{figure}
 
@@ -141,7 +142,8 @@ The whole process is depicted in figure \ref{fig:virtqueue}.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.48]{virtqueue.pdf}
-\caption{Virtual queue operations.}
+\caption{Virtual queue operations. The guest adds new buffers (represented as scatter-gather lists) to the virtual queue. The hypervisor
+	consumes (uses) those buffers and returns them to the virtual queue. Tokens are used by the guest to identify buffers.}
 \label{fig:virtqueue}
 \end{figure}
 
@@ -202,8 +204,8 @@ The data structures are depicted in figure \ref{fig:vring}.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.48]{vring.pdf}
-\caption{Virtio ring data structures. On the top the descriptor array is depicted as a table. On the bottom the \emph{avail} ring and the 
-	 \emph{used} ring.}
+\caption{Virtio ring data structures, used to implement the Virtio interface. On the top the descriptor array is depicted as a table.
+	 On the bottom the \emph{avail} ring and the \emph{used} ring.}
 \label{fig:vring}
 \end{figure}
 
@@ -240,7 +242,7 @@ e.g. maximize the percentage of spared notifications.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 1.0]{virtiocode.pdf}
-\caption{Pseudocode for the virtio driver and the virtio device emulation for our example.}
+\caption{Pseudocode for the virtio driver and the virtio device emulation for the example in section \ref{sec:virtiomin}.}
 \label{fig:virtiocode}
 \end{figure}
 
@@ -313,7 +315,8 @@ way requests cannot stall. Figure \ref{fig:race} shows an example of race.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 1.0]{race.pdf}
-\caption{Race condition between a producer and a consumer.}
+\caption{Race condition between a producer and a consumer. The race condition exists because the consumer doesn't have a way to check for
+	 more work and enable notifications in an atomical manner.}
 \label{fig:race}
 \end{figure}
 
@@ -349,8 +352,9 @@ avail buffers. This situation is depicted in figure \ref{fig:pccs}.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.55]{pccs.pdf}
-\caption{On the top there is the sender virtual queue with its two Producer/Consumer Couples (PCCs). On the bottom there is the
-	 receiver virtual queue with its PCCs.}
+\caption{High level scheme of the virtio-net implementation. On the top there is the sender virtual queue with its two Producer/Consumer
+	 Couples (PCCs), which handle the TX path. On the bottom there is the receiver virtual queue with its PCCs, which handle the
+	 RX path.}
 \label{fig:pccs}
 \end{figure}
 
@@ -562,7 +566,7 @@ since there is no significant work that can be done in parallel.
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 0.797 & KHz\\
+\textbf{Interrupt rate} & 0.8 & KHz\\
 \textbf{TX packet rate} & 154.8 & Kpps\\
 \textbf{TX bitrate} & 127.6 & Mbps\\
 \textbf{TX notifications} & 0.007 & Mbps\\
@@ -839,12 +843,12 @@ The results for the 2-VCPU test case (shown in table \ref{tab:e1000-par-tx-g2h2v
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 0.581 & KHz\\
+\textbf{Interrupt rate} & 0.58 & KHz\\
 \textbf{TX packet rate} & 182.9 & Kpps\\
 \textbf{TX bitrate} & 133.1 & Mbps\\
-\textbf{TX notifications rate} & 0.344 & KHz\\
+\textbf{TX notifications rate} & 0.34 & KHz\\
 \textbf{MMIO write rate} & 1.4 & KHz\\
-\textbf{MMIO read rate} & 0.547 & KHz\\
+\textbf{MMIO read rate} & 0.55 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}

@@ -156,7 +156,7 @@ Putting all together, the figure \ref{fig:qemuthreads} depicts the QEMU thread s
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{qemu-threads.pdf}
-\caption{QEMU thread scheme.}
+\caption{Threads of a QEMU process. The IOThread executes the event-loop while each VCPU thread executes a guest CPU.}
 \label{fig:qemuthreads}
 \end{figure}
 
@@ -269,7 +269,8 @@ The frontend-backend interface is depicted in figure \ref{fig:frontback}.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.60]{frontend-backend.pdf}
-\caption{Interface between network frontend and network backend.}
+\caption{Interface between a QEMU network frontend and a QEMU network backend. Each peer can send network packets to the other peer
+	calling the \texttt{qemu\_send\_packet()} function.}
 \label{fig:frontback}
 \end{figure}
 
@@ -391,7 +392,7 @@ The figure \ref{fig:txring} depicts the TX ring with its index registers.
 \centering
 \includegraphics[scale = 0.35]{tx-ring.pdf}
 \caption{The e1000 TX ring with its index registers. The grey area contains software-owned descriptors, while the white area
-	contains hardware-owned descriptors.}
+	contains hardware-owned descriptors. Index registers are used for synchronization between software and hardware.}
 \label{fig:txring}
 \end{figure}
 
@@ -468,7 +469,7 @@ The figure \ref{fig:rxring} depicts the RX ring with its index registers.
 \centering
 \includegraphics[scale = 0.35]{rx-ring.pdf}
 \caption{The e1000 RX ring with its index registers. The grey area contains software-owned descriptors, while the white area
-	contains hardware-owned descriptors.}
+	contains hardware-owned descriptors. Index registers are used for synchronization between software and hardware.}
 \label{fig:rxring}
 \end{figure}
 
@@ -573,14 +574,14 @@ about the RADV moderation mechanism.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{rdtr-state.png}
-\caption{State diagram of the RDTR timer (Packet Delay Timer). CITE INTEL}
+\caption{State diagram of the e1000 RDTR timer (Packet Delay Timer).}
 \label{fig:rdtrstate}
 \end{figure}
 
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.45]{radv-only.png}
-\caption{RX moderation example that makes use of the RADV timer.}
+\caption{RX moderation example that makes use of the e1000 RADV timer.}
 \label{fig:radvonly}
 \end{figure}
 
@@ -795,7 +796,7 @@ and call the function \texttt{netif\_rx()} with the structure built as parameter
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 0.65]{linux-interface.pdf}
-\caption{On the bottom the interface between the network device driver and the network stack, and on the top the interface between
+\caption{On the bottom the interface between the network device driver and the Linux network stack. On the top the interface between
 user applications and the network stack.}
 \label{fig:linux-interface}
 \end{figure}

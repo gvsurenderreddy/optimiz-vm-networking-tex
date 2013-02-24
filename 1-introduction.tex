@@ -10,7 +10,8 @@ resources.
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 1.0]{3-layers-stack.pdf}
-\caption{A standard 3-layers-stack computer system}
+\caption{A standard 3-layers-stack computer system. On the bottom the bare hardware, in the middle the Operating System, on the top
+	the Applications layer.}
 \label{fig:3ls}
 \end{figure}
 
@@ -125,14 +126,14 @@ Same-ISA system VM can be further divided, depending on how the VMM is implement
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 1.0]{type-1-vmm.pdf}
-\caption{An example of system using Type 1 VMMs.}
+\caption{An example of system using Type 1 VMMs. The VMM runs on the bare hardware.}
 \label{fig:t1vmm}
 \end{figure}
 
 \begin{figure}[bt]
 \centering
 \includegraphics[scale = 1.0]{type-2-vmm.pdf}
-\caption{An example of system using Type 1 VMMs.}
+\caption{An example of system using Type 2 VMMs. The VMM runs on top of a conventional OS.}
 \label{fig:t2vmm}
 \end{figure}
 
