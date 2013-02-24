@@ -1,5 +1,5 @@
 \documentclass{beamer}
-%\usetheme{JLTree}
+\usetheme{JLTree}
 
 \usepackage{graphicx}
 \usepackage[english]{babel}
@@ -17,9 +17,6 @@
 \newcommand{\R}{\numberset{R}}
 \newcommand{\Z}{\numberset{Z}}
 \newcommand{\pscal}{\text{\large{\textbf{\textperiodcentered}}}}
-
-
-
 
 
 
@@ -165,7 +162,7 @@
 
 
 %=================================================================
-\section{Working environment}
+\section{Work environment}
 %=================================================================
 
 \begin{frame}
@@ -485,7 +482,7 @@
   \only<1> {
     \begin{block}{Virtio}
       \begin{itemize}
-	\item A de-facto standard for I/O paravirtualization
+	\item A \emph{de facto} standard for I/O paravirtualization
 	\item A set of new efficient device drivers/emulators
 	\item Increase code reuse across devices and platforms
       \end{itemize}
@@ -494,7 +491,7 @@
   
   \only<2> {
     \begin{figure}
-      \includegraphics[width=.55\columnwidth]{virtio.pdf}
+      \includegraphics[width=.50\columnwidth]{virtio.pdf}
     \end{figure}
   }
   
@@ -527,7 +524,7 @@
   \only<2> {
     \begin{block}{Paravirtualization patch}
       \begin{itemize}
-	\item Both e1000 driver and e1000 must be patched
+	\item Both e1000 driver and e1000 emulation must be patched
 	\item About 100 lines of code in the hypervisor
 	\item About 40 lines in the Linux kernel
       \end{itemize}
@@ -583,7 +580,7 @@
 \end{frame}
 
 \begin{frame}
-\frametitle{Future works}
+\frametitle{Future work}
   \begin{block}{More can be done to optimize e1000 performance in VM systems}
     \begin{itemize}
       \item Remove redundant packet copies in the TX path

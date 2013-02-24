@@ -472,8 +472,8 @@ performance is good ($\sim 160$ Kpps). At the same time, the TX notification rat
 \begin{tabular}{lrl}
 \toprule
 \textbf{Interrupt rate} & 0.822 & KHz\\
-\textbf{TX packet rate} & 158.115 & Kpps\\
-\textbf{TX bitrate} & 130.287 & Mbps\\
+\textbf{TX packet rate} & 158.1 & Kpps\\
+\textbf{TX bitrate} & 130.3 & Mbps\\
 \textbf{TX notifications} & 0.007 & Mbps\\
 \bottomrule
 \end{tabular}
@@ -522,9 +522,9 @@ is used in place of \texttt{enable\_cb\_delayed}. The results are shown in table
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 108.420 & KHz\\
-\textbf{TX packet rate} & 110.440 & Kpps\\
-\textbf{TX bitrate} & 91.003 & Mbps\\
+\textbf{Interrupt rate} & 108.4 & KHz\\
+\textbf{TX packet rate} & 110.4 & Kpps\\
+\textbf{TX bitrate} & 91.0 & Mbps\\
 \textbf{TX notifications} & 0.007 & Mbps\\
 \bottomrule
 \end{tabular}
@@ -563,8 +563,8 @@ since there is no significant work that can be done in parallel.
 \begin{tabular}{lrl}
 \toprule
 \textbf{Interrupt rate} & 0.797 & KHz\\
-\textbf{TX packet rate} & 154.816 & Kpps\\
-\textbf{TX bitrate} & 127.569 & Mbps\\
+\textbf{TX packet rate} & 154.8 & Kpps\\
+\textbf{TX bitrate} & 127.6 & Mbps\\
 \textbf{TX notifications} & 0.007 & Mbps\\
 \bottomrule
 \end{tabular}
@@ -582,9 +582,9 @@ The measured critical rate is about 110 Kpps, which is not very high if compared
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 57.615 & KHz\\
-\textbf{RX packet rate} & 103.042 & Kpps\\
-\textbf{RX stream} & 127.569 & Mbps\\
+\textbf{Interrupt rate} & 57.6 & KHz\\
+\textbf{RX packet rate} & 103.0 & Kpps\\
+\textbf{RX stream} & 127.6 & Mbps\\
 \textbf{RX notification} & 0.007 & Mbps\\
 \bottomrule
 \end{tabular}
@@ -623,9 +623,9 @@ the 1-VCPU case, because there is not enough parallelism in the guest to exploit
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 43.542 & KHz\\
-\textbf{RX packet rate} & 100.142 & Kpps\\
-\textbf{TX stream} & 82.517 & Mbps\\
+\textbf{Interrupt rate} & 43.5 & KHz\\
+\textbf{RX packet rate} & 100.1 & Kpps\\
+\textbf{TX stream} & 82.5 & Mbps\\
 \textbf{RX notification} & 0.004 & Mbps\\
 \bottomrule
 \end{tabular}
@@ -814,12 +814,12 @@ The results for 1-VCPU case are shown in table \ref{tab:e1000-par-tx-g2h1vcpu}.
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 0.370 & KHz\\
-\textbf{TX packet rate} & 183.447 & Kpps\\
-\textbf{TX bitrate} & 135.136 & Mbps\\
-\textbf{TX notifications rate} & 0.438 & KHz\\
-\textbf{MMIO write rate} & 1.181 & KHz\\
-\textbf{MMIO read rate} & 0.430 & KHz\\
+\textbf{Interrupt rate} & 0.37 & KHz\\
+\textbf{TX packet rate} & 183.4 & Kpps\\
+\textbf{TX bitrate} & 135.1 & Mbps\\
+\textbf{TX notifications rate} & 0.4 & KHz\\
+\textbf{MMIO write rate} & 1.2 & KHz\\
+\textbf{MMIO read rate} & 0.4 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -840,10 +840,10 @@ The results for the 2-VCPU test case (shown in table \ref{tab:e1000-par-tx-g2h2v
 \begin{tabular}{lrl}
 \toprule
 \textbf{Interrupt rate} & 0.581 & KHz\\
-\textbf{TX packet rate} & 182.899 & Kpps\\
-\textbf{TX bitrate} & 133.150 & Mbps\\
+\textbf{TX packet rate} & 182.9 & Kpps\\
+\textbf{TX bitrate} & 133.1 & Mbps\\
 \textbf{TX notifications rate} & 0.344 & KHz\\
-\textbf{MMIO write rate} & 1.438 & KHz\\
+\textbf{MMIO write rate} & 1.4 & KHz\\
 \textbf{MMIO read rate} & 0.547 & KHz\\
 \bottomrule
 \end{tabular}
@@ -861,12 +861,12 @@ shows the statistics when the VM accepts an incoming rate of about 317 Kpps.
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 3.774 & KHz\\
-\textbf{RX packet rate} & 317.335 & Kpps\\
-\textbf{RX bitrate} & 231.020 & Mbps\\
+\textbf{Interrupt rate} & 3.8 & KHz\\
+\textbf{RX packet rate} & 317.3 & Kpps\\
+\textbf{RX bitrate} & 231.0 & Mbps\\
 \textbf{RX notifications} & 0.001 & Mbps\\
-\textbf{MMIO write rate} & 7.546 & KHz\\
-\textbf{MMIO read rate} & 3.772 & KHz\\
+\textbf{MMIO write rate} & 7.5 & KHz\\
+\textbf{MMIO read rate} & 3.8 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -890,12 +890,12 @@ shows the statistics when the VM accepts an incoming rate of about 315 Kpps.
 \begin{center}
 \begin{tabular}{lrl}
 \toprule
-\textbf{Interrupt rate} & 3.678 & KHz\\
-\textbf{RX packet rate} & 315.439 & Kpps\\
-\textbf{RX bitrate} & 229.640 & Mbps\\
+\textbf{Interrupt rate} & 3.7 & KHz\\
+\textbf{RX packet rate} & 315.4 & Kpps\\
+\textbf{RX bitrate} & 229.6 & Mbps\\
 \textbf{RX notifications} & 0.002 & Mbps\\
-\textbf{MMIO write rate} & 7.358 & KHz\\
-\textbf{MMIO read rate} & 3.678 & KHz\\
+\textbf{MMIO write rate} & 7.4 & KHz\\
+\textbf{MMIO read rate} & 3.7 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
