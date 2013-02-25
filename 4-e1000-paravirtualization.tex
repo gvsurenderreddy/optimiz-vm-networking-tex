@@ -68,6 +68,7 @@ the driver.
 
 
 \section{The Virtio standard}
+\label{sec:virtiostd}
 Virtio (\cite{ref:virtio}) is a virtualization standard that aims at high I/O performance through device paravirtualization. This is done
 creating a completely new set of device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
 similar to the Xen I/O paravirtualization (\cite{ref:xenloop}) and the VMware \emph{Guest Tools} (\cite{ref:vmware2001, ref:vmxnet3}).
@@ -642,6 +643,7 @@ the 1-VCPU case, because there is not enough parallelism in the guest to exploit
 
 
 \section{Porting paravirtualization to e1000}
+\label{sec:e1000-paravirt}
 In the previous sections we've seen how is possible to get good performance using a paravirtualized I/O solution. Virtio drivers are
 efficient because the only make use MMIO accesses and interrupts to notify the other peer of a virtual queue, and exchange data and
 metadata through shared memory.

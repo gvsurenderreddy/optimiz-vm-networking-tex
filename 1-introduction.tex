@@ -180,6 +180,7 @@ Nowadays VMMs generally use a combination of the three methods.
 
 
 \subsection{Interpretation}
+\label{sec:interpretation}
 The naive emulation technique is known as \emph{interpretation}.
 Basically, the VMM has to do in software what a physical CPU would have done
 in hardware. Take the current instruction (or statement, if we are dealing with high level languages VMs), excecute it updating the
@@ -281,3 +282,36 @@ to deliver an interrupt to the guest.
 
 Since VM switches are very expensive, but sometimes necessary, trying to minimize them is fundamental if a VMM
 wants to deliver good I/O performance.
+
+
+\section{I/O Virtualization techniques}
+Similarly to what happens with code interpretation (section \ref{sec:interpretation}), emulating a device means doing in software what the
+device would do in hardware. Therefore, each time the guest accesses an I/O device (e.g. writes to a device register), the VMM has to take
+the control and emulate all the \emph{side effects} associated to the specific I/O access.
+
+Virtualization of I/O devices is also described in \cite{ref:vmware2001}, which also proposes some ways to accelerate the emulation.
+However, through chapter \ref{chap:env} we will give a complete example of how a network adapter is virtualized in our reference
+VMM (QEMU).
+
+\vspace{0.5cm}
+
+In order to further improve the early I/O virtualization tecnhiques, research and products have followed three routes:
+\begin{itemize}
+  \item Hardware support in the devices (\emph{virtual functions} and IOMMUs \cite{ref:iommu}), so that guest machines can access directly
+	and in a protected way subsets of the device and run at native speed.
+
+  \item Run-time optimizations in the VMM. As an example, \cite{ref:usenix-avvx} shows how short sequences of code involving multiple I/O
+	instructions can be profitably run in interpreted mode to save some VM exits.
+
+  \item Reduce the expensive operations in device emulation (I/O accesses and interrupts) by designing \emph{virtual} device models more 
+amenable to emulation. This approach is known as \emph{device paravirtualization} and has produced several different virtual device models 
+(vmxnet \cite{ref:vmxnet3}, virtio \cite{ref:virtio}, xenfront 
+\cite{ref:xenbook}), in turn requiring custom device drivers in the guest OS.
+Synchronization between the guest and the VMM uses a shared memory block, which is used to exchange the state of the communication, while
+I/O accesses and interrupts are used only for notifications: In this way minimizing the amount of VMExits is easier.
+
+\end{itemize}
+
+We will analyze device paravirtualization in chapter \ref{cha:paravirt}.
+In section \ref{sec:e1000-paravirt} we will show that paravirtualization can be introduced with minimal extensions into an existing physical 
+device model.
