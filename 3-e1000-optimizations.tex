@@ -58,18 +58,55 @@ computed counting the number of occurrences of each event over a 1 second period
 
 \begin{table}
 \begin{center}
-\begin{tabular}{lrl}
+\begin{tabular}{lrrl}
 \toprule
-\textbf{Interrupt rate} & 20.6 & KHz\\
-\textbf{TX packet rate} & 20.6 & Kpps\\
-\textbf{TX bitrate} & 15.0 & Mbps\\
-\textbf{TX notifications rate} & 20.6 & KHz\\
-\textbf{MMIO write rate} & 61.7 & KHz\\
-\textbf{MMIO read rate} & 61.7 & KHz\\
+\textbf{Existing implementation} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 20.6 & 23.6 & KHz\\
+TX packet rate & 20.6 & 30.4& Kpps\\
+TX bitrate & 15.0 & 22.1 & Mbps\\
+TX notifications rate & 20.6 & 30.4& KHz\\
+MMIO write rate & 61.7 & 61.9& KHz\\
+MMIO read rate & 61.7 & 47.3 & KHz\\
+\bottomrule
+&&\\
+\toprule
+\textbf{With interrupt moderation} & \textbf{1-VCPU} & \textbf{2-VCPUs} &\\
+\midrule
+Interrupt rate & 3.8 & 3.8 & KHz\\
+TX packet rate & 47.8 & 47.2 & Kpps\\
+TX bitrate & 34.8 & 34.3 & Mbps\\
+TX notifications rate & 47.8 & 47.2 & KHz\\
+MMIO write rate & 55.5 & 54.8 & KHz\\
+MMIO read rate & 11.5 & 11.5 & KHz\\
+\bottomrule
+&&\\
+\toprule
+\textbf{With interrupt moderation and TDT write batching} & \textbf{1-VCPU} & \textbf{2-VCPUs} &\\
+\midrule
+Interrupt rate & 1.8 & 2.8 & KHz\\
+TX packet rate & 163.5 & 145.0 & Kpps\\
+TX bitrate & 119.0 & 105.6 & Mbps\\
+TX notifications rate & 1.8 & 2.8 & KHz\\
+MMIO write rate & 5.5 & 8.3 & KHz\\
+MMIO read rate & 5.6 & 8.4 & KHz\\
+\bottomrule
+\\
+\toprule
+\textbf{With TDT write batching (no interrupt moderation)} & \textbf{1-VCPU} & \textbf{2-VCPUs} &\\
+\midrule
+Interrupt rate & & 7.8 & KHz\\
+TX packet rate & & 95.4 & Kpps\\
+TX bitrate & & 69.5 & Mbps\\
+TX notifications rate & & 7.8 & KHz\\
+MMIO write rate& & 23.5 & KHz\\
+MMIO read rate & & 23.5 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
-\caption{Guest to host statistics with 1 VCPU per guest}
+\caption{Guest to host statistics. These four tables show some statistics about a sender VM in various situations (original implementation,
+	 moderation patch, TDT-write-batching patch and combinations). Each table reports a set of measurements relative to a 1-VCPU VM
+	and another set relative to a 2-VCPUs VM.}
 \label{tab:e1000-tx-g2h1vcpu}
 \end{table}
 
@@ -104,24 +141,7 @@ an interrupt for each frame we send, and so to have low performance.
 
 
 \subsubsection{2 VCPUs test}
-The same experiment has been done assigning 2 VCPU to the guest. The measurement results are shown in the table \ref{tab:e1000-tx-g2h2vcpu}.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 23.6 & KHz\\
-\textbf{TX packet rate} & 30.4 & Kpps\\
-\textbf{TX bitrate} & 22.1 & Mbps\\
-\textbf{TX notifications rate} & 30.4 & KHz\\
-\textbf{MMIO write rate} & 61.9 & KHz\\
-\textbf{MMIO read rate} & 47.3 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 2 VCPU per guest}
-\label{tab:e1000-tx-g2h2vcpu}
-\end{table}
+The same experiment has been done assigning 2 VCPU to the guest. The measurement results are shown in the table \ref{tab:e1000-tx-g2h1vcpu}.
 
 Compared with the 1-VCPU case, the situation is slightly better, but still modest. Here we have about 30 Kpps, and an interrupt rate
 that is significantly less than that. This means that the TX interrupt routine (e.g. the polling function), on average, handles more than
@@ -207,18 +227,33 @@ rate.
 
 \begin{table}
 \begin{center}
-\begin{tabular}{lrl}
+\begin{tabular}{lrrl}
 \toprule
-\textbf{Interrupt rate} & 14.3 & KHz\\
-\textbf{RX packet rate} & 14.4 & Kpps\\
-\textbf{RX bitrate} & 10.5 & Mbps\\
-\textbf{RX notifications} & 14.3 & Mbps\\
-\textbf{MMIO write rate} & 42.9 & KHz\\
-\textbf{MMIO read rate} & 42.9 & KHz\\
+\textbf{Existing implementation} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 14.3 & 6.7 & KHz\\
+RX packet rate & 14.4 & 185.7 & Kpps\\
+RX bitrate & 10.5 & 135.1 & Mbps\\
+RX notifications & 14.3 & 13.7 & Mbps\\
+MMIO write rate & 42.9 & 22.7 & KHz\\
+MMIO read rate & 42.9 & 13.5 & KHz\\
+\bottomrule
+&&&\\
+\toprule
+\textbf{With interrupt moderation} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 3.8 & 2.1 & KHz\\
+RX packet rate & 137.1 & 216.7 & Kpps\\
+RX bitrate & 99.8 & 157.7 & Mbps\\
+RX notifications & 10.3 & 14.3 & Mbps\\
+MMIO write rate & 18.0 & 18.5 & KHz\\
+MMIO read rate & 11.5 & 6.3 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
-\caption[H2G with 1VCPU per guest]{Host to guest statistics with 1 VCPU per guest}
+\caption{Host to guest statistics. These two tables show some statistics about a receiver VM in two different situations (original
+	 implementation and moderation patch). Each table reports a set of measurements relative to a 1-VCPU VM and another set relative
+	 to a 2-VCPUs VM.}
 \label{tab:e1000-rx-g2h1vcpu}
 \end{table}
 
@@ -297,24 +332,7 @@ if the rate is passed, the system still works, even if packets start to be dropp
 varies very much between 5\% and 85\%). The performance doesn't drop immediately after the critical rate, like in the 1-VCPU case: The system
 is still usable (but not stable) if the incoming RX rate is about 300K.
 
-The measurement results are shown in the table \ref{tab:e1000-rx-g2h2vcpu} when the incoming packet rate is about 185 Kpps.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 6.7 & KHz\\
-\textbf{RX packet rate} & 185.7 & Kpps\\
-\textbf{RX bitrate} & 135.1 & Mbps\\
-\textbf{RX notifications} & 13.7 & Mbps\\
-\textbf{MMIO write rate} & 22.7 & KHz\\
-\textbf{MMIO read rate} & 13.5 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption[H2G with 2VCPU per guest]{Host to guest statistics with 2 VCPU per guest}
-\label{tab:e1000-rx-g2h2vcpu}
-\end{table}
+The measurement results are shown in the table \ref{tab:e1000-rx-g2h1vcpu} when the incoming packet rate is about 185 Kpps.
 
 As we can see, here the NAPI works very well, since the producer here is way faster than 14 Kpps (see section \ref{sec:e1000-rx-g2h1vcpu}).
 On average we serve about 27 RX frames per interrupt, so that the high interrupt overhead and the MMIO accesses are amortized.
@@ -404,24 +422,7 @@ the interrupt rate.
 
 \subsection{TX performance}
 \label{sec:e1000-mit-tx}
-The results in the 1-VCPU case is shown in table \ref{tab:e1000-mit-tx-g2h1vcpu}.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 3.8 & KHz\\
-\textbf{TX packet rate} & 47.8 & Kpps\\
-\textbf{TX bitrate} & 34.8 & Mbps\\
-\textbf{TX notifications rate} & 47.8 & KHz\\
-\textbf{MMIO write rate} & 55.5 & KHz\\
-\textbf{MMIO read rate} & 11.5 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 1 VCPU per guest when interrupt moderation is implemented.}
-\label{tab:e1000-mit-tx-g2h1vcpu}
-\end{table}
+The results in the 1-VCPU case is shown in table \ref{tab:e1000-tx-g2h1vcpu}.
 
 As we can see from the table, there is an important improvement. The interrupt rate is less than 4 KHz, and this is what we expected to see
 since we have set the MAIR to 4000.
@@ -452,24 +453,7 @@ As stated previously, in this study we want to maximize the packet rate, and we 
 
 \vspace{0.5cm}
 
-The measured results in the 2-VCPU case are shown in table \ref{tab:e1000-mit-tx-g2h2vcpu}.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 3.8 & KHz\\
-\textbf{TX packet rate} & 47.2 & Kpps\\
-\textbf{TX bitrate} & 34.3 & Mbps\\
-\textbf{TX notifications rate} & 47.2 & KHz\\
-\textbf{MMIO write rate} & 54.8 & KHz\\
-\textbf{MMIO read rate} & 11.5 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 2 VCPU per guest when interrupt moderation is implemented.}
-\label{tab:e1000-mit-tx-g2h2vcpu}
-\end{table}
+The measured results in the 2-VCPU case are shown in table \ref{tab:e1000-tx-g2h1vcpu}.
 
 The results are similar to the 1-VCPU case, because the incremented parallelism is not exploited. Even if there is parallelism
 between the interrupt routine and the transmission path, the TX clean work is not very expensive. Therefore we don't benefit from a second 
@@ -478,24 +462,7 @@ VCPU, or the little benefits are compensated by the overhead involved in the SMP
 
 \subsection{RX performance}
 The measured critical rate with 1-VCPU is about 150 Kpps.
-The table \ref{tab:e1000-mit-rx-g2h1vcpu} shows the results obtained when the incoming RX rate is about 137 Kpps.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 3.8 & KHz\\
-\textbf{RX packet rate} & 137.1 & Kpps\\
-\textbf{RX bitrate} & 99.8 & Mbps\\
-\textbf{RX notifications} & 10.3 & Mbps\\
-\textbf{MMIO write rate} & 18.0 & KHz\\
-\textbf{MMIO read rate} & 11.5 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Host to guest statistics with 1 VCPU per guest, when interrupt moderation is implemented.}
-\label{tab:e1000-mit-rx-g2h1vcpu}
-\end{table}
+The table \ref{tab:e1000-rx-g2h1vcpu} shows the results obtained when the incoming RX rate is about 137 Kpps.
 
 As we can see, there is a huge improvement in the packet rate performance, because on average we amortize the interrupt related overhead
 over about 35 frames. Since the interrupt rate is lower, also the RX notification rate is lower. On average we should expect 
@@ -527,24 +494,7 @@ Moreover, we cannot choose the MAIR to be too low because of the latency (see se
 
 \vspace{0.5cm}
 
-The 2-VCPU case results (MAIR = 4 KHz) are shown in table \ref{tab:e1000-mit-rx-g2h2vcpu}
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 2.1 & KHz\\
-\textbf{RX packet rate} & 216.7 & Kpps\\
-\textbf{RX bitrate} & 157.7 & Mbps\\
-\textbf{RX notifications} & 14.3 & Mbps\\
-\textbf{MMIO write rate} & 18.5 & KHz\\
-\textbf{MMIO read rate} & 6.3 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Host to guest statistics with 1 VCPU per guest, when interrupt moderation is implemented.}
-\label{tab:e1000-mit-rx-g2h2vcpu}
-\end{table}
+The 2-VCPU case results (MAIR = 4 KHz) are shown in table \ref{tab:e1000-rx-g2h1vcpu}
 
 Similarly to what happens without moderation, a second VCPU improves the RX performance, because the improved parallelism makes the
 NAPI moderation to play an active role.
@@ -616,24 +566,7 @@ obtained with the the batching patch and the moderation patch. The Linux e1000 m
 plus the \texttt{batching} parameter, which has been set to 1.
 
 \subsubsection{1-VCPU test}
-The results in the 1-VCPU case is shown in table \ref{tab:e1000-mit-bat-tx-g2h1vcpu}.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 1.8 & KHz\\
-\textbf{TX packet rate} & 163.5 & Kpps\\
-\textbf{TX bitrate} & 119.0 & Mbps\\
-\textbf{TX notifications rate} & 1.8 & KHz\\
-\textbf{MMIO write rate} & 5.5 & KHz\\
-\textbf{MMIO read rate} & 5.6 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 1 VCPU per guest when interrupt moderation is implemented and TDT write batching is enabled.}
-\label{tab:e1000-mit-bat-tx-g2h1vcpu}
-\end{table}
+The results in the 1-VCPU case is shown in table \ref{tab:e1000-tx-g2h1vcpu}.
 
 As we can see there is a big improvement in the TX rate with respect to the previous solutions (existing implementation with or without
 the moderation patch), because now we have only one TX notification for each interrupt. At this point we have moderated
@@ -680,24 +613,7 @@ to process with no pending TX frames, and so \texttt{bat\_pending} is set to 0. 
 
 
 \subsubsection{2-VCPU test}
-The results in the 2-VCPU case is shown in table \ref{tab:e1000-mit-bat-tx-g2h2vcpu}.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 2.8 & KHz\\
-\textbf{TX packet rate} & 145.0 & Kpps\\
-\textbf{TX bitrate} & 105.6 & Mbps\\
-\textbf{TX notifications rate} & 2.8 & KHz\\
-\textbf{MMIO write rate} & 8.3 & KHz\\
-\textbf{MMIO read rate} & 8.4 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 2 VCPU per guest when interrupt moderation is implemented and TDT write batching is enabled.}
-\label{tab:e1000-mit-bat-tx-g2h2vcpu}
-\end{table}
+The results in the 2-VCPU case is shown in table \ref{tab:e1000-tx-g2h1vcpu}.
 
 As we can see, the performance is very good, but slightly inferior if compared with the 1-VCPU case.
 As pointed out in the 1-VCPU analysis, when a VCPU is doing the TX emulation, the lock is held, and so the other VCPU cannot do any VMexit,
@@ -741,24 +657,7 @@ In more detail, the first time the guest wants to send \texttt{bat\_pending} is 
 While one VCPU is doing the TX emulation or is servicing the TX interrupt, the other VCPU is able to insert more frames in the TX ring,
 so that the next time the notification is done many descriptors are ready to be processed. In this way the batching strategy is able
 to amortize the TX notification overhead over many frames. We have run an experiment with 2-VCPU and obtained the results reported in
-table \ref{tab:e1000-bat-tx-g2h2vcpu}.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 7.8 & KHz\\
-\textbf{TX packet rate} & 95.4 & Kpps\\
-\textbf{TX bitrate} & 69.5 & Mbps\\
-\textbf{TX notifications rate} & 7.8 & KHz\\
-\textbf{MMIO write rate} & 23.5 & KHz\\
-\textbf{MMIO read rate} & 23.5 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 2 VCPU per guest when TDT write batching is enabled but interrupt moderation is not implemented.}
-\label{tab:e1000-bat-tx-g2h2vcpu}
-\end{table}
+table \ref{tab:e1000-tx-g2h1vcpu}.
 
 Here is an extracted sequence of batch lengths
 

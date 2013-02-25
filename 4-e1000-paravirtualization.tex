@@ -70,7 +70,7 @@ the driver.
 \section{The Virtio standard}
 Virtio (\cite{ref:virtio}) is a virtualization standard that aims at high I/O performance through device paravirtualization. This is done
 creating a completely new set of device drivers, which are able to communicate efficiently with a Virtio-capable hypervisor. Its approach is
-similar to the Xen I/O paravirtualization and the VMware \emph{Guest Tools}.
+similar to the Xen I/O paravirtualization (\cite{ref:xenloop}) and the VMware \emph{Guest Tools} (\cite{ref:vmware2001, ref:vmxnet3}).
 Virtio is an effort to estabilish a standard interface between drivers and hypervisors for paravirtualized I/O, in order to increase the 
 code reuse across different platforms. In this way we avoid having an independent I/O paravirtualization solution for each hypervisor.
 The Virtio standard defines different I/O (fake) devices, including a network adapter, a SCSI disk and a serial interface, and is currently
@@ -473,16 +473,31 @@ performance is good ($\sim 160$ Kpps). At the same time, the TX notification rat
 
 \begin{table}
 \begin{center}
-\begin{tabular}{lrl}
+\begin{tabular}{lrrl}
 \toprule
-\textbf{Interrupt rate} & 0.822 & KHz\\
-\textbf{TX packet rate} & 158.1 & Kpps\\
-\textbf{TX bitrate} & 130.3 & Mbps\\
-\textbf{TX notifications} & 0.007 & Mbps\\
+\textbf{Virtio-net} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 0.822 & 0.8 & KHz\\
+TX packet rate & 158.1 & 154.8 & Kpps\\
+TX bitrate & 130.3 & 127.6 & Mbps\\
+TX notifications & 0.007 & 0.007 & Mbps\\
+\bottomrule
+\\
+\toprule
+\textbf{Paravirtualized e1000} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 0.37 & 0.58 & KHz\\
+TX packet rate & 183.4 & 182.9 & Kpps\\
+TX bitrate & 135.1 & 133.1 & Mbps\\
+TX notifications rate & 0.4 & 0.34 & KHz\\
+MMIO write rate & 1.2 & 1.4 & KHz\\
+MMIO read rate & 0.4 & 0.55 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
-\caption{Guest to host statistics with 1 VCPU per guest.}
+\caption{Guest to host statistics with paravirtualized solutions. The table on the top shows virtio-net performance, while the table on
+	 the bottom shows paravirtualized e1000 performance. Each table reports a set of measurements for the 1-VCPU case and one for
+	 the 2-VCPUs case.}
 \label{tab:virtionet-tx-g2h1vcpu}
 \end{table}
 
@@ -559,42 +574,43 @@ In the RX path we are not so lucky (see the next subsection).
 
 \vspace{0.5cm}
 
-The results for the 2-VCPU test case are shown in table \ref{tab:virtionet-tx-g2h2vcpu}, and are very similar to results for 1-VCPU case,
+The results for the 2-VCPU test case are shown in table \ref{tab:virtionet-tx-g2h1vcpu}, and are very similar to results for 1-VCPU case,
 since there is no significant work that can be done in parallel.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 0.8 & KHz\\
-\textbf{TX packet rate} & 154.8 & Kpps\\
-\textbf{TX bitrate} & 127.6 & Mbps\\
-\textbf{TX notifications} & 0.007 & Mbps\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 2 VCPU per guest}
-\label{tab:virtionet-tx-g2h2vcpu}
-\end{table}
 
 
 \subsubsection{RX performance}
 \label{sec:virtionet-perf-rx}
 The measured critical rate is about 110 Kpps, which is not very high if compared with what we get with e1000 (adding the mitigation patch).
+The collected statistics are shown in table \ref{tab:virtionet-rx-g2h1vcpu}.
 
 \begin{table}
 \begin{center}
-\begin{tabular}{lrl}
+\begin{tabular}{lrrl}
 \toprule
-\textbf{Interrupt rate} & 57.6 & KHz\\
-\textbf{RX packet rate} & 103.0 & Kpps\\
-\textbf{RX stream} & 127.6 & Mbps\\
-\textbf{RX notification} & 0.007 & Mbps\\
+\textbf{Virtio-net} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 57.6 & 43.5 & KHz\\
+RX packet rate & 103.0 & 100.1 & Kpps\\
+RX stream & 127.6 & 124.0 & Mbps\\
+RX notification & 0.007 & 0.004 & Mbps\\
+\bottomrule
+\\
+\toprule
+\textbf{Paravirtualized e1000} & \textbf{1-VCPU} & \textbf{2-VCPUs} & \\
+\midrule
+Interrupt rate & 3.8 & 3.7 & KHz\\
+RX packet rate & 317.3 & 315.4 & Kpps\\
+RX bitrate & 231.0 & 229.6 & Mbps\\
+RX notifications & 0.001 & 0.002 & Mbps\\
+MMIO write rate & 7.5 & 7.4 & KHz\\
+MMIO read rate & 3.8 & 3.7 & KHz\\
 \bottomrule
 \end{tabular}
 \end{center}
-\caption{Host to guest statistics with 1 VCPU per guest}
-\label{tab:virtionet-rx-g1hvcpu}
+\caption{Host to guest statistics with paravirtualized solutions. The table on the top shows virtio-net performance, while the table on
+	 the bottom shows paravirtualized e1000 performance. Each table reports a set of measurements for the 1-VCPU case and one for
+	 the 2-VCPUs case.}
+\label{tab:virtionet-rx-g2h1vcpu}
 \end{table}
 
 Also in this case, the reason for low performance is tied to the lack of interrupt mitigation. As we can see, the interrupt rate is
@@ -620,23 +636,8 @@ very good (about zero notifications).
 
 \vspace{0.5cm}
 
-The measured results for the 2-VCPU case are shown in table \ref{tab:virtionet-rx-g2hvcpu}. There is not a substantial difference with
+The measured results for the 2-VCPU case are shown in table \ref{tab:virtionet-rx-g2h1vcpu}. There is not a substantial difference with
 the 1-VCPU case, because there is not enough parallelism in the guest to exploit.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 43.5 & KHz\\
-\textbf{RX packet rate} & 100.1 & Kpps\\
-\textbf{TX stream} & 82.5 & Mbps\\
-\textbf{RX notification} & 0.004 & Mbps\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Host to guest statistics with 2 VCPU per guest}
-\label{tab:virtionet-rx-g2hvcpu}
-\end{table}
 
 
 
@@ -813,23 +814,7 @@ paravirtual & 1\\
 
 
 \subsubsection{TX performance}
-The results for 1-VCPU case are shown in table \ref{tab:e1000-par-tx-g2h1vcpu}.
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 0.37 & KHz\\
-\textbf{TX packet rate} & 183.4 & Kpps\\
-\textbf{TX bitrate} & 135.1 & Mbps\\
-\textbf{TX notifications rate} & 0.4 & KHz\\
-\textbf{MMIO write rate} & 1.2 & KHz\\
-\textbf{MMIO read rate} & 0.4 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 1 VCPU per guest with paravirtualized e1000 and interrupt moderation.}
-\label{tab:e1000-par-tx-g2h1vcpu}
-\end{table}
+The results for 1-VCPU case are shown in table \ref{tab:virtionet-tx-g2h1vcpu}.
 
 As we can see, performance are better with reference to the previous tests (both e1000 and Virtio). The interrupt rate is very low,
 thanks to mitigation and NAPI. The TX notification are minimized because of the usual NAPI-like scheme.
@@ -838,45 +823,13 @@ to the ICR read and IMC and IMS write, while 1.35 access per iterrupt are due to
 
 \vspace{0.5cm}
 
-The results for the 2-VCPU test case (shown in table \ref{tab:e1000-par-tx-g2h2vcpu}) are very similar.
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 0.58 & KHz\\
-\textbf{TX packet rate} & 182.9 & Kpps\\
-\textbf{TX bitrate} & 133.1 & Mbps\\
-\textbf{TX notifications rate} & 0.34 & KHz\\
-\textbf{MMIO write rate} & 1.4 & KHz\\
-\textbf{MMIO read rate} & 0.55 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Guest to host statistics with 2 VCPU per guest with paravirtualized e1000 and interrupt moderation.}
-\label{tab:e1000-par-tx-g2h2vcpu}
-\end{table}
+The results for the 2-VCPU test case (shown in table \ref{tab:virtionet-tx-g2h1vcpu}) are very similar.
+
 
 
 \subsubsection{RX performance}
-In the 1-VCPU case the measured critical rate is about 315 Kpps, which is the best result so far. Table \ref{tab:e1000-par-rx-g2h1vcpu}
+In the 1-VCPU case the measured critical rate is about 315 Kpps, which is the best result so far. Table \ref{tab:virtionet-rx-g2h1vcpu}
 shows the statistics when the VM accepts an incoming rate of about 317 Kpps.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 3.8 & KHz\\
-\textbf{RX packet rate} & 317.3 & Kpps\\
-\textbf{RX bitrate} & 231.0 & Mbps\\
-\textbf{RX notifications} & 0.001 & Mbps\\
-\textbf{MMIO write rate} & 7.5 & KHz\\
-\textbf{MMIO read rate} & 3.8 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Host to guest statistics with 1 VCPU per guest wit paravirtualized e1000 and interrupt moderation}
-\label{tab:e1000-par-rx-g2h1vcpu}
-\end{table}
 
 The very good result is due to the interrupt moderation, the NAPI, the MMIO access optimizations (avoid reading the STATUS register to
 flush the register write) and the RX notification moderation.
@@ -887,22 +840,5 @@ In our case the incoming rate is still too low to make that situation very likel
 
 \vspace{0.5cm}
 
-With 2 VPCUs the measured critical rate is also about 315 Kpps. Table \ref{tab:e1000-par-rx-g2h2vcpu}
+With 2 VPCUs the measured critical rate is also about 315 Kpps. Table \ref{tab:virtionet-rx-g2h1vcpu}
 shows the statistics when the VM accepts an incoming rate of about 315 Kpps.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{lrl}
-\toprule
-\textbf{Interrupt rate} & 3.7 & KHz\\
-\textbf{RX packet rate} & 315.4 & Kpps\\
-\textbf{RX bitrate} & 229.6 & Mbps\\
-\textbf{RX notifications} & 0.002 & Mbps\\
-\textbf{MMIO write rate} & 7.4 & KHz\\
-\textbf{MMIO read rate} & 3.7 & KHz\\
-\bottomrule
-\end{tabular}
-\end{center}
-\caption{Host to guest statistics with 2 VCPU per guest wit paravirtualized e1000 and interrupt moderation}
-\label{tab:e1000-par-rx-g2h2vcpu}
-\end{table}
