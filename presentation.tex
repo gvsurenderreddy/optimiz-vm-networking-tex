@@ -78,6 +78,11 @@
 
 \begin{frame}
 \frametitle{Introduction}
+
+  \begin{figure}
+    \includegraphics[width=0.5\columnwidth]{screen.pdf}
+  \end{figure}
+  
   \begin{block}{What is a Virtual Machine?}
       \begin{itemize}
 	\item An execution environment able to execute \emph{guest} code under the control of an \emph{hypervisor} (or 
@@ -111,11 +116,14 @@
 
 
 \begin{frame}
-\frametitle{The problem}
+\frametitle{The problem} 
+  \begin{figure}
+    \includegraphics[width=0.5\columnwidth]{virtual-mode.pdf}
+  \end{figure}
   \begin{block}{VM network performance is low with hardware virtualization}
     \begin{itemize}
       \pause
-      \item CPU switches between the host world and the guest world
+      \item CPU switches between the normal mode (host world) and ``virtual'' mode (guest world)
       \pause
       \item Switches are extremely expensive
       \pause
@@ -149,8 +157,6 @@
     \begin{itemize}
       \item Free, open source and multi-platform system emulator
       \pause
-      \item Type 2 VMM $\longrightarrow$ a VM is a process in the host OS
-      \pause
       \item Can make use of Kernel-based Virtual Machine (KVM) for native guest code execution
       \pause
       \item Emulates SMP systems
@@ -182,13 +188,10 @@
 \end{frame}
   
 \begin{frame}
+\frametitle{QEMU-KVM internal structure}
     \begin{block}{KVM mechanics}
       \begin{itemize}
-	\item VCPUs switches between guest world and host world
-	\pause
-	\item A switch occurs when the VCPU tries to access the I/O space, MMIO or when it receives an interrupt
-	\pause
-	\item The hypervisor can \emph{inject} interrupts into the guest
+	\item VCPU access I/O or is interrupted $\rightarrow$ A world switch occurs
 	\pause
 	\item I/O emulation can be done both by VCPUs and by IOThread
 	\pause
@@ -213,12 +216,14 @@
 \end{frame}
 
 \begin{frame}
+\frametitle{QEMU networking}
     \begin{figure}
     \includegraphics[width=.90\columnwidth]{frontend-backend.pdf}
     \end{figure}
 \end{frame}
 
 \begin{frame}
+\frametitle{QEMU networking}
 
   \begin{columns}
     \begin{column}{0.5\textwidth}
@@ -261,21 +266,21 @@
     \end{block}
 \end{frame}
 
-\begin{frame}
-\frametitle{QEMU e1000 emulation}
-  \begin{block}{How is emulation performed?}
-    \begin{enumerate}
-      \item A VCPU tries to access an e1000 register $\rightarrow$ The VPCU switches to host world
-      \pause
-      \item QEMU takes the control and invoke the e1000 frontend
-      \pause
-      \item The e1000 frontend emulates all the side effects of the register access
-    \end{enumerate}
-  \end{block}
-\end{frame}
+%\begin{frame}
+%\frametitle{QEMU e1000 emulation}
+%  \begin{block}{How is emulation performed?}
+%    \begin{enumerate}
+%      \item A VCPU tries to access an e1000 register $\rightarrow$ The VPCU switches to host world
+%      \pause
+%      \item QEMU takes the control and invoke the e1000 frontend
+%      \pause
+%      \item The e1000 frontend emulates all the side effects of the register access
+%    \end{enumerate}
+%  \end{block}
+%\end{frame}
    
 \begin{frame}
-\frametitle{Linux interface with the network driver}
+\frametitle{TX/RX path}
   \begin{columns}
   \begin{column}{0.5\textwidth}
     \begin{figure}
@@ -296,6 +301,7 @@
 \end{frame}
 
 \begin{frame}
+\frametitle{TX/RX path}
   \begin{columns}
   \begin{column}{0.5\textwidth}
     \begin{figure}
@@ -346,20 +352,14 @@
 \end{frame}
 
 \begin{frame}
+\frametitle{Problems of the existing implementation}
     \begin{block}{What are the problems and bottlenecks?}
       \begin{itemize}
-	\item Interrupt mitigation is not emulated, although present in the real hardware $\rightarrow$ We get an interrupt for each
-	      TX or RX packet
-	\pause
+	\item Interrupt mitigation is not emulated
 	\item 5 register accesses in the interrupt routine
-	\pause
 	\item A TX notification for each TX packet
-	\pause
 	\item A RX notification for each RX packet
-	\pause
-	\item Interrupts and register accesses are extremely expensive
-	\pause
-	\item Moreover, TX emulation is done synchronously $\rightarrow$ Parallelism is affected
+	\item TX emulation is done synchronously
       \end{itemize}
     \end{block}
 \end{frame}
@@ -379,6 +379,7 @@
 \end{frame}
 
 \begin{frame}
+\frametitle{Adding interrupt moderation}
     \begin{block}{TX statistics improvements}
       \begin{center}
       \begin{tabular}{lrcrl}
@@ -403,12 +404,25 @@
 \end{frame}
 
 \begin{frame}
-\frametitle{Moderating TX notifications}
+\frametitle{Maximum TX packet rate vs MAIR}
+  \begin{figure}
+    \includegraphics[width=0.75\columnwidth]{MAIR-vs-TXRate.png}
+  \end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Maximum RX packet rate vs MAIR}
+  \begin{figure}
+    \includegraphics[width=0.75\columnwidth]{MAIR-vs-CR.png}
+  \end{figure}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Batching TX notifications}
     \begin{block}{TDT \emph{write batching} patch}
       \begin{itemize}
 	\item The e1000 driver coalesces TX notifications
-	\pause
-	\item This is done without using expensive kernel timers
 	\pause
 	\item We don't notify if there is a pending TX interrupt
 	\pause
@@ -420,6 +434,7 @@
 \end{frame}
 
 \begin{frame}
+\frametitle{Batching TX notifications}
     \begin{block}{TX statistics improvements w.r.t. moderation patch statistics}
       \begin{center}
       \begin{tabular}{lrcrl}
@@ -439,28 +454,27 @@
 %=================================================================
 
 \begin{frame}
-\frametitle{The paravirtualization concept}
+\frametitle{Full virtualization vs paravirtualization}
     \begin{block}{Full virtualization}
       \begin{itemize}
-	\item So far we have assumed that the guest OS is completely unaware of being run in a Virtual Machine environment
-	\pause
-	\item This type of virtualization is called \emph{Full virtualization}
+	\item The guest OS is unaware of being run in a Virtual Machine environment
 	\pause
 	\item Advantage: The hypervisor can support an unmodified OS
 	\pause
-	\item Disadvantage: Hypervisor implementation is generally complicated and inefficient
+	\item Disadvantage: Hypervisor implementation is complicated and inefficient
       \end{itemize}
     \end{block}
 \end{frame}
 
 \begin{frame}
+\frametitle{Full virtualization vs paravirtualization}
     \begin{block}{Paravirtualization}
       \begin{itemize}
 	\item The guest OS is aware of being under the control of an hypervisor
 	\pause
 	\item Guest and hypervisor can communicate in a simpler and more efficient way
 	\pause
-	\item MMIO accesses and interrupts are used \emph{only} for notifications and never to exchange data
+	\item MMIO accesses and interrupts are used \emph{only} for notifications
 	\pause
 	\item Data are exchanged only through shared memory
       \end{itemize}
@@ -469,6 +483,14 @@
 
 \begin{frame}
 \frametitle{The Virtio standard}
+  \begin{columns}
+    \begin{column}{0.5\textwidth}
+      \begin{figure}
+	\includegraphics[width=1.0\columnwidth]{virtio.pdf}
+      \end{figure}
+    \end{column}
+  
+    \begin{column}{0.5\textwidth}
     \begin{block}{Virtio}
       \begin{itemize}
 	\item A \emph{de facto} standard for I/O paravirtualization
@@ -478,12 +500,8 @@
 	\item Increase code reuse across devices and platforms
       \end{itemize}
     \end{block}
-\end{frame}
-
-\begin{frame}
-    \begin{figure}
-      \includegraphics[width=.50\columnwidth]{virtio.pdf}
-    \end{figure}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 \begin{frame}
@@ -492,7 +510,6 @@
       \caption{Driver and hypervisor can exchange data through a virtual queue}
     \end{figure}
 \end{frame}
-
 
 \begin{frame}
 \frametitle{Porting the paravirtualization concept to e1000}
@@ -504,9 +521,9 @@
 	\pause
 	\item Two Producer/consumer couples (PCCs) for the TX path and two PCCs for the RX path
 	\pause
-	\item Consumer work is done asynchronously w.r.t. the producer and with notifications disabled
+	\item The producer notifies the consumer only when the consumer is not active
 	\pause
-	\item The producer notifies the consumer only when the consumer stops
+	\item Consumer work is done asynchronously w.r.t. the producer and with notifications disabled
 	\pause
 	\item If the consumer is faster notification moderation is required
       \end{itemize}
@@ -534,16 +551,14 @@
       \end{tabular}
       \end{center}
     \end{block}
-\end{frame}
-
-\begin{frame}
+    
     \begin{block}{RX statistics improvements w.r.t. moderation patch statistics}
       \begin{center}
       \begin{tabular}{lrcrl}
 	\textbf{Interrupt rate} & 3.8 & $\rightarrow$ & 3.8 & KHz\\
 	\textbf{RX packet rate} & 137.1 & $\rightarrow$ & 317.3 & Kpps\\
 	\textbf{RX notifications} & 10.3 & $\rightarrow$ & 0.002 & Mbps\\
-	\textbf{MMIO rate} & 29.5 & $\rightarrow$ & 11.1 & KHz\\
+ 	\textbf{MMIO rate} & 29.5 & $\rightarrow$ & 11.1 & KHz\\
       \end{tabular}
       \end{center}
     \end{block}
@@ -554,6 +569,22 @@
 \section{Conclusions and future work}
 %=================================================================
 \begin{frame}
+  \frametitle{Summary}
+    \begin{block}{}
+      \begin{center}
+      \begin{tabular}{lrcrl}
+	\textbf{Combination} 			& \textbf{TX} 	& \textbf{RX} 	& \\
+	e1000 					&	20.6	&  	14.4	& KHz\\
+	e1000 + moderation 			& 	47.8 	& 	137.1 	& KHz\\
+	e1000 + moderation + batching 		&  	163.5	& 	137.1 	& KHz\\
+	e1000 + moderation + paravirtualization	&	183.4	&	317.3	& KHz\\
+ 	Virtio 					& 	158.1	& 	103.0	& KHz\\
+      \end{tabular}
+      \end{center}
+    \end{block}
+\end{frame}
+
+\begin{frame}
 \frametitle{Conclusions}
   \begin{block}{}
     \begin{itemize}
@@ -561,9 +592,6 @@
       \pause
       \item TX path: $8.9\times$ speed-up
       \item RX path: $22\times$ speed-up
-      \pause
-      \item Collecting the idea presented in this work, in combination with the VALE fast switch, we have submitted a short paper
-	    to USENIX ATC'13
     \end{itemize}
   \end{block}
 \end{frame}
@@ -574,9 +602,7 @@
     \begin{itemize}
       \item Remove redundant packet copies in the TX path
       \pause
-      \item Euristics to improve latency, byassing interrupt moderation
-      \pause
-      \item Use emulated MSI/MSI-X interrupts
+      \item Euristics to improve latency, bypassing interrupt moderation
       \pause
       \item Explore TSO/GSO to improve TCP throughput
     \end{itemize}
